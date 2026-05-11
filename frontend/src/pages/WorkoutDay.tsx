@@ -14,7 +14,6 @@ import { exercisesApi } from '@/api/exercises.api';
 import { getErrorMessage } from '@/utils/errors';
 import { Button } from '@/components/ui/Button';
 import { Sheet } from '@/components/ui/Sheet';
-import { ErrorMessage } from '@/components/ui/ErrorMessage';
 import { ExerciseRow } from '@/components/exercise/ExerciseRow';
 import { ExerciseForm } from '@/components/exercise/ExerciseForm';
 import type { Exercise } from '@/types';

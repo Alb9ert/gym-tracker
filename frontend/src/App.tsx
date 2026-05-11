@@ -11,6 +11,7 @@ import { WorkoutDay } from '@/pages/WorkoutDay';
 import { ExerciseDetail } from '@/pages/ExerciseDetail';
 import { BodyWeight } from '@/pages/BodyWeight';
 import { Analytics } from '@/pages/Analytics';
+import { GymVisits } from '@/pages/GymVisits';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,6 +66,7 @@ export function App() {
               <Route path="/exercise/:exerciseId" element={<ExerciseDetail />} />
               <Route path="/body-weight" element={<BodyWeight />} />
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/gym" element={<GymVisits />} />
             </Route>
           </Route>
 

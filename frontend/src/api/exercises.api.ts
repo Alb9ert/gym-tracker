@@ -13,6 +13,10 @@ interface UpdateExerciseData {
   sets?: number;
   reps?: string;
   weight?: number | null;
+  note?: string | null;
+  isActive?: boolean;
+  goalWeight?: boolean;
+  goalReps?: boolean;
 }
 
 export const exercisesApi = {

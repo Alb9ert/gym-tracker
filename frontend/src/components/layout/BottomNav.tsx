@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 
 const navItems = [
   { to: '/', label: 'Workouts', icon: '🏋️' },
+  { to: '/gym', label: 'Gym', icon: '📅' },
   { to: '/body-weight', label: 'Weight', icon: '⚖️' },
   { to: '/analytics', label: 'Progress', icon: '📈' },
 ];
