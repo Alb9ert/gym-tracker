@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { workoutDaysApi } from '@/api/workoutDays.api';
 import { bodyWeightApi } from '@/api/bodyWeight.api';
-import { statsApi, type DayStats, type StaleExercise } from '@/api/stats.api';
+import { statsApi, type StaleExercise } from '@/api/stats.api';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
