@@ -14,6 +14,7 @@ export async function create(userId: string, dayId: string, data: {
   sets: number;
   reps: string;
   weight: number | null;
+  note?: string | null;
 }) {
   const day = await WorkoutDay.findOne({ _id: dayId, userId });
   if (!day) throw AppError.notFound('Workout day');
@@ -26,6 +27,7 @@ export async function create(userId: string, dayId: string, data: {
     sets: data.sets,
     reps: data.reps,
     weight: data.weight,
+    note: data.note ?? null,
     order: count,
   });
 
@@ -36,7 +38,7 @@ export async function create(userId: string, dayId: string, data: {
     sets: exercise.sets,
     reps: exercise.reps,
     weight: exercise.weight,
-    changedFields: ['sets', 'reps', 'weight'],
+    changedFields: [],
     recordedAt: new Date(),
   });
 
@@ -48,11 +50,15 @@ export async function update(userId: string, exerciseId: string, data: {
   sets?: number;
   reps?: string;
   weight?: number | null;
+  note?: string | null;
+  isActive?: boolean;
+  goalWeight?: boolean;
+  goalReps?: boolean;
 }) {
   const exercise = await Exercise.findOne({ _id: exerciseId, userId });
   if (!exercise) throw AppError.notFound('Exercise');
 
-  // Determine which tracked fields changed
+  // Determine which tracked fields changed (note is intentionally excluded)
   const changedFields: string[] = [];
   if (data.sets !== undefined && data.sets !== exercise.sets) changedFields.push('sets');
   if (data.reps !== undefined && data.reps !== exercise.reps) changedFields.push('reps');
@@ -63,6 +69,10 @@ export async function update(userId: string, exerciseId: string, data: {
   if (data.sets !== undefined) exercise.sets = data.sets;
   if (data.reps !== undefined) exercise.reps = data.reps;
   if (data.weight !== undefined) exercise.weight = data.weight;
+  if (data.note !== undefined) exercise.note = data.note;
+  if (data.isActive !== undefined) exercise.isActive = data.isActive;
+  if (data.goalWeight !== undefined) exercise.goalWeight = data.goalWeight;
+  if (data.goalReps !== undefined) exercise.goalReps = data.goalReps;
 
   await exercise.save();
 

@@ -9,6 +9,7 @@ import workoutDayRoutes from './routes/workoutDay.routes';
 import exerciseRoutes from './routes/exercise.routes';
 import progressRoutes from './routes/progress.routes';
 import bodyWeightRoutes from './routes/bodyWeight.routes';
+import statsRoutes from './routes/stats.routes';
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api/exercises', exerciseRoutes);
 
 app.use('/api/progress', progressRoutes);
 app.use('/api/body-weight', bodyWeightRoutes);
+app.use('/api/stats', statsRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 

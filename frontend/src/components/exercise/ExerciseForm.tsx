@@ -9,6 +9,7 @@ interface FormData {
   sets: number;
   reps: string;
   weight: number | null;
+  note: string | null;
 }
 
 interface Props {
@@ -24,6 +25,7 @@ export function ExerciseForm({ initial, onSubmit, loading, error, submitLabel = 
   const [sets, setSets] = useState(String(initial?.sets ?? 3));
   const [reps, setReps] = useState(initial?.reps ?? '10');
   const [weight, setWeight] = useState(initial?.weight != null ? String(initial.weight) : '');
+  const [note, setNote] = useState(initial?.note ?? '');
 
   function handleSubmit() {
     const parsedWeight = weight.trim() === '' ? null : parseFloat(weight);
@@ -32,6 +34,7 @@ export function ExerciseForm({ initial, onSubmit, loading, error, submitLabel = 
       sets: parseInt(sets, 10) || 3,
       reps: reps.trim(),
       weight: parsedWeight,
+      note: note.trim() || null,
     });
   }
 
@@ -75,6 +78,23 @@ export function ExerciseForm({ initial, onSubmit, loading, error, submitLabel = 
         min="0"
         step="0.5"
       />
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-semibold text-secondary">
+          Note <span className="font-normal text-gray-400">(optional)</span>
+        </label>
+        <textarea
+          placeholder="e.g. keep elbows tucked, pause at chest…"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={300}
+          rows={2}
+          className="bg-white text-primary placeholder-gray-400 rounded-xl px-4 py-3 text-base outline-none border border-border focus:border-accent focus:ring-2 focus:ring-accent/20 transition resize-none"
+        />
+        {note.length > 240 && (
+          <p className="text-xs text-secondary text-right">{note.length}/300</p>
+        )}
+      </div>
 
       <ErrorMessage message={error} />
 

@@ -21,6 +21,10 @@ export interface Exercise {
   sets: number;
   reps: string;
   weight: number | null;
+  note: string | null;
+  isActive: boolean;
+  goalWeight: boolean;
+  goalReps: boolean;
   order: number;
   createdAt: string;
   updatedAt: string;
