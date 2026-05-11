@@ -77,6 +77,12 @@ function BodyWeightSection() {
 
   if (!entries?.length) return null;
 
+  const tickInterval = chartData && chartData.length > 30
+    ? Math.floor(chartData.length / 6)
+    : chartData && chartData.length > 10
+    ? Math.floor(chartData.length / 4)
+    : 0;
+
   return (
     <div className="bg-white rounded-2xl border border-border-subtle shadow-sm p-5 mb-5">
       <div className="flex items-center justify-between mb-4">
@@ -90,8 +96,8 @@ function BodyWeightSection() {
         <ResponsiveContainer width="100%" height={140}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" />
-            <XAxis dataKey="date" tick={{ fill: '#6E6E73', fontSize: 10 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#6E6E73', fontSize: 10 }} axisLine={false} tickLine={false} width={32} domain={['auto', 'auto']} />
+            <XAxis dataKey="date" tick={{ fill: '#6E6E73', fontSize: 10 }} axisLine={false} tickLine={false} interval={tickInterval} />
+            <YAxis tick={{ fill: '#6E6E73', fontSize: 10 }} axisLine={false} tickLine={false} width={36} domain={['auto', 'auto']} />
             <Tooltip
               contentStyle={{ background: '#fff', border: '1px solid #C7C7CC', borderRadius: '10px', fontSize: '12px' }}
               labelStyle={{ color: '#6E6E73' }}
@@ -246,6 +252,12 @@ function DayStatsView({ dayId }: { dayId: string }) {
     avgWeight: d.avgWeight,
   }));
 
+  const xTickInterval = chartData.length > 30
+    ? Math.floor(chartData.length / 6)
+    : chartData.length > 10
+    ? Math.floor(chartData.length / 4)
+    : 0;
+
   const metricKey = metric === 'volume' ? 'volume' : 'avgWeight';
   const metricLabel = metric === 'volume' ? 'Total volume' : 'Avg weight';
   const metricUnit = 'kg';
@@ -294,8 +306,8 @@ function DayStatsView({ dayId }: { dayId: string }) {
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" />
-              <XAxis dataKey="date" tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} width={42} domain={['auto', 'auto']} />
+              <XAxis dataKey="date" tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} interval={xTickInterval} />
+              <YAxis tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} width={metric === 'volume' ? 52 : 42} domain={['auto', 'auto']} />
               <Tooltip
                 contentStyle={{ background: '#fff', border: '1px solid #C7C7CC', borderRadius: '12px', fontSize: '13px' }}
                 labelStyle={{ color: '#6E6E73', fontWeight: '600' }}

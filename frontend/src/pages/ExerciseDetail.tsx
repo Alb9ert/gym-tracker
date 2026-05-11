@@ -46,12 +46,15 @@ const METRIC_CONFIG: Record<Metric, { label: string; unit: string; color: string
   volume: { label: 'Volume', unit: 'kg', color: '#FF9500' },
 };
 
+function utcMidnight(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
 function rangeCutoff(range: Range): Date | null {
   if (range === 'all') return null;
   const days = { '7d': 7, '30d': 30, '90d': 90 }[range];
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  d.setHours(0, 0, 0, 0);
+  const d = utcMidnight(new Date());
+  d.setUTCDate(d.getUTCDate() - days);
   return d;
 }
 
@@ -84,10 +87,8 @@ function buildContinuousSeries(
   }
   if (!byDate.size) return [];
 
-  const firstDate = new Date(sorted[0].recordedAt);
-  firstDate.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const firstDate = utcMidnight(new Date(sorted[0].recordedAt));
+  const today = utcMidnight(new Date());
 
   const cutoff = rangeCutoff(range);
 
@@ -103,7 +104,7 @@ function buildContinuousSeries(
     if (lastVal != null && (!cutoff || cursor >= cutoff)) {
       result.push({ date: formatDate(key), value: lastVal });
     }
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   return result;
@@ -188,10 +189,9 @@ export function ExerciseDetail() {
   const latestVal = chartData[chartData.length - 1]?.value;
   const delta = firstVal != null && latestVal != null ? latestVal - firstVal : null;
 
-  // Use step line for multi-day continuous series, smooth curve for same-day entries
-  const lineType = chartData.length > 1 && chartData[0]?.date.includes(' ')
-    ? 'monotone'   // same-day fallback (date is a time string like "09:30")
-    : 'stepAfter'; // daily continuous series
+  // stepAfter for multi-day carry-forward, monotone for same-day time-based fallback
+  const isSameDay = chartData[0]?.date.includes(':');
+  const lineType = isSameDay ? 'monotone' : 'stepAfter';
 
   // Only show every Nth label so X-axis isn't crowded
   const xTickInterval = chartData.length > 60 ? Math.floor(chartData.length / 8)
@@ -290,7 +290,7 @@ export function ExerciseDetail() {
                 tick={{ fill: '#6E6E73', fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
-                width={40}
+                width={metric === 'volume' ? 52 : 40}
                 domain={['auto', 'auto']}
               />
               <Tooltip content={<CustomTooltip unit={cfg.unit} />} />
@@ -369,9 +369,13 @@ export function ExerciseDetail() {
                 {formatDate(entry.recordedAt)}
               </span>
             </div>
-            {entry.changedFields.length > 0 && (
-              <div className="flex gap-1.5 mt-2 flex-wrap">
-                {entry.changedFields.map((field) => {
+            <div className="flex gap-1.5 mt-2 flex-wrap">
+              {entry.changedFields.length === 0 ? (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-gray-100 text-secondary">
+                  Started
+                </span>
+              ) : (
+                entry.changedFields.map((field) => {
                   const colors: Record<string, string> = {
                     weight: 'bg-accent/10 text-accent',
                     reps:   'bg-accent-green/10 text-accent-green',
@@ -385,9 +389,9 @@ export function ExerciseDetail() {
                       {field} ↑
                     </span>
                   );
-                })}
-              </div>
-            )}
+                })
+              )}
+            </div>
           </div>
         ))}
       </div>
