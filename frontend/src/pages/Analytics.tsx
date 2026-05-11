@@ -104,6 +104,69 @@ function BodyWeightSection() {
   );
 }
 
+function daysSince(dateStr: string | null): number | null {
+  if (!dateStr) return null;
+  const diff = Date.now() - new Date(dateStr).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+function StaleExercises() {
+  const navigate = useNavigate();
+  const { data } = useQuery({
+    queryKey: ['stale-exercises'],
+    queryFn: () => statsApi.getStaleExercises().then((r) => r.data.data),
+  });
+
+  if (!data?.length) return null;
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-3">
+        <p className="text-xs font-bold text-secondary uppercase tracking-wider">No progress in 14+ days</p>
+        <span className="bg-accent-orange/15 text-accent-orange text-xs font-bold px-2 py-0.5 rounded-md">
+          {data.length}
+        </span>
+      </div>
+      <div className="flex flex-col gap-2">
+        {data.map((ex: StaleExercise) => {
+          const days = ex.lastChangedAt ? daysSince(ex.lastChangedAt) : null;
+          return (
+            <button
+              key={ex.id}
+              onClick={() => navigate(`/exercise/${ex.id}`)}
+              className="bg-white rounded-xl border border-border-subtle shadow-sm px-4 py-3 text-left w-full active:bg-gray-50"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-primary text-sm truncate">{ex.name}</p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span className="text-xs bg-gray-100 text-secondary font-semibold px-2 py-0.5 rounded-md">
+                      {ex.currentSets}×{ex.currentReps}
+                    </span>
+                    {ex.currentWeight != null && (
+                      <span className="text-xs bg-accent/10 text-accent font-bold px-2 py-0.5 rounded-md">
+                        {ex.currentWeight} kg
+                      </span>
+                    )}
+                    {ex.currentWeight == null && (
+                      <span className="text-xs bg-gray-100 text-secondary font-semibold px-2 py-0.5 rounded-md">
+                        Bodyweight
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-accent-orange flex-shrink-0">
+                  {days != null ? `${days}d ago` : 'Never changed'}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RecentActivity() {
   const { data } = useQuery({
     queryKey: ['stats-summary'],
@@ -352,6 +415,11 @@ export function Analytics() {
           {activeDayId && <DayStatsView key={activeDayId} dayId={activeDayId} />}
         </>
       )}
+
+      {/* Stale exercises */}
+      <div className="mt-5">
+        <StaleExercises />
+      </div>
 
       {/* Recent activity */}
       <div className="mt-5">
