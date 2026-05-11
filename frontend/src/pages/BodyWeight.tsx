@@ -41,69 +41,87 @@ export function BodyWeight() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['body-weight'] }),
   });
 
-  const chartData = entries
-    ?.slice()
-    .reverse()
-    .map((e) => ({ date: formatDate(e.recordedAt), weight: e.weight }));
+  const chartData = entries?.slice().reverse().map((e) => ({
+    date: formatDate(e.recordedAt),
+    weight: e.weight,
+  }));
 
   const latest = entries?.[0];
 
   return (
     <div className="px-5 pt-14 pb-6">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold tracking-tight">Body Weight</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-primary">Body Weight</h1>
         {latest && (
-          <div className="text-right">
-            <p className="text-2xl font-bold">{latest.weight} kg</p>
-            <p className="text-xs text-white/40">{formatDate(latest.recordedAt)}</p>
+          <div className="text-right bg-white border border-border-subtle rounded-2xl px-4 py-2 shadow-sm">
+            <p className="text-2xl font-bold text-primary">{latest.weight} kg</p>
+            <p className="text-xs font-medium text-secondary">{formatDate(latest.recordedAt)}</p>
           </div>
         )}
       </div>
 
       {/* Chart */}
       {chartData && chartData.length > 1 && (
-        <div className="bg-zinc-900 rounded-2xl p-5 mb-6">
+        <div className="bg-white rounded-2xl p-5 mb-5 border border-border-subtle shadow-sm">
+          <p className="text-xs font-bold text-secondary uppercase tracking-wider mb-4">Weight over time</p>
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
-              <XAxis dataKey="date" tick={{ fill: '#ffffff50', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#ffffff50', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" />
+              <XAxis dataKey="date" tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
               <Tooltip
-                contentStyle={{ background: '#27272a', border: 'none', borderRadius: '12px', fontSize: '13px' }}
-                labelStyle={{ color: '#ffffff60' }}
+                contentStyle={{
+                  background: '#fff',
+                  border: '1px solid #C7C7CC',
+                  borderRadius: '12px',
+                  fontSize: '13px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                }}
+                labelStyle={{ color: '#6E6E73', fontWeight: '600' }}
+                itemStyle={{ color: '#34C759', fontWeight: '700' }}
               />
-              <Line type="monotone" dataKey="weight" stroke="#30D158" strokeWidth={2} dot={{ fill: '#30D158', r: 3 }} />
+              <Line
+                type="monotone"
+                dataKey="weight"
+                stroke="#34C759"
+                strokeWidth={2.5}
+                dot={{ fill: '#34C759', r: 4, strokeWidth: 0 }}
+                activeDot={{ r: 6, strokeWidth: 0 }}
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      <Button onClick={() => { setSheetOpen(true); setWeight(''); setFormError(null); }} className="w-full mb-6">
+      <Button onClick={() => { setSheetOpen(true); setWeight(''); setFormError(null); }} className="w-full mb-5">
         + Log weight
       </Button>
 
       {isLoading ? (
         <div className="flex justify-center py-8">
-          <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-gray-200 border-t-accent rounded-full animate-spin" />
         </div>
       ) : (
         <div className="flex flex-col gap-2">
           {entries?.map((entry) => (
-            <div key={entry._id} className="bg-zinc-900 rounded-xl px-4 py-3 flex items-center justify-between">
+            <div key={entry._id} className="bg-white rounded-xl px-4 py-3.5 border border-border-subtle shadow-sm flex items-center justify-between">
               <div>
-                <span className="font-semibold">{entry.weight} kg</span>
-                <span className="text-white/40 text-sm ml-3">{formatDate(entry.recordedAt)}</span>
+                <span className="font-bold text-primary">{entry.weight} kg</span>
+                <span className="text-secondary text-sm font-medium ml-3">{formatDate(entry.recordedAt)}</span>
               </div>
               <button
                 onClick={() => deleteMutation.mutate(entry._id)}
-                className="text-accent-red/50 text-sm active:text-accent-red"
+                className="text-accent-red text-sm font-semibold px-3 py-1 bg-accent-red/10 rounded-lg active:bg-accent-red/20"
               >
                 Delete
               </button>
             </div>
           ))}
           {entries?.length === 0 && (
-            <p className="text-white/30 text-sm text-center py-8">No entries yet. Log your first weight above.</p>
+            <div className="bg-white rounded-2xl border border-border-subtle px-4 py-10 text-center">
+              <p className="font-semibold text-primary">No entries yet</p>
+              <p className="text-secondary text-sm mt-1">Log your first weight above</p>
+            </div>
           )}
         </div>
       )}
