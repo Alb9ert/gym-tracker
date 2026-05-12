@@ -1,4 +1,4 @@
-import { Exercise, IExercise } from '../models/Exercise';
+import { Exercise } from '../models/Exercise';
 import { ExerciseHistory } from '../models/ExerciseHistory';
 import { WorkoutDay } from '../models/WorkoutDay';
 import { AppError } from '../utils/AppError';
@@ -15,6 +15,7 @@ export async function create(userId: string, dayId: string, data: {
   reps: string;
   weight: number | null;
   note?: string | null;
+  muscleGroups?: string[];
 }) {
   const day = await WorkoutDay.findOne({ _id: dayId, userId });
   if (!day) throw AppError.notFound('Workout day');
@@ -28,6 +29,7 @@ export async function create(userId: string, dayId: string, data: {
     reps: data.reps,
     weight: data.weight,
     note: data.note ?? null,
+    muscleGroups: data.muscleGroups ?? [],
     order: count,
   });
 
@@ -54,6 +56,7 @@ export async function update(userId: string, exerciseId: string, data: {
   isActive?: boolean;
   goalWeight?: boolean;
   goalReps?: boolean;
+  muscleGroups?: string[];
 }) {
   const exercise = await Exercise.findOne({ _id: exerciseId, userId });
   if (!exercise) throw AppError.notFound('Exercise');
@@ -73,6 +76,7 @@ export async function update(userId: string, exerciseId: string, data: {
   if (data.isActive !== undefined) exercise.isActive = data.isActive;
   if (data.goalWeight !== undefined) exercise.goalWeight = data.goalWeight;
   if (data.goalReps !== undefined) exercise.goalReps = data.goalReps;
+  if (data.muscleGroups !== undefined) exercise.muscleGroups = data.muscleGroups;
 
   await exercise.save();
 

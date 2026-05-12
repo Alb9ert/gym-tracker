@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import Model from 'react-body-highlighter';
 import { workoutDaysApi } from '@/api/workoutDays.api';
 import { bodyWeightApi } from '@/api/bodyWeight.api';
 import { statsApi, type StaleExercise } from '@/api/stats.api';
+import { MUSCLE_GROUPS, MUSCLE_CATEGORY } from '@/constants/muscles';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -65,21 +67,333 @@ function SummaryCards() {
   );
 }
 
+const TIER_COLORS = {
+  3: { hex: '#34C759', chip: 'bg-accent-green/10 text-accent-green border-accent-green/20' },
+  2: { hex: '#FF9500', chip: 'bg-accent-orange/10 text-accent-orange border-accent-orange/20' },
+  1: { hex: '#FF3B30', chip: 'bg-accent-red/10 text-accent-red border-accent-red/20' },
+} as const;
+
+
+function MuscleMap() {
+  const { data: exercises } = useQuery({
+    queryKey: ['muscle-stats'],
+    queryFn: () => statsApi.getMuscleStats().then((r) => r.data.data),
+  });
+
+  const STALE_DAYS = 14;
+
+  const muscleStats = useMemo(() => {
+    if (!exercises?.length) return [];
+
+    // Sets and last-progress date per muscle group
+    const setsMap = new Map<string, number>();
+    const lastProgressMap = new Map<string, Date>();
+
+    for (const ex of exercises) {
+      const prog = ex.lastProgressAt ? new Date(ex.lastProgressAt) : null;
+      for (const id of ex.muscleGroups) {
+        setsMap.set(id, (setsMap.get(id) ?? 0) + ex.sets);
+        if (prog) {
+          const existing = lastProgressMap.get(id);
+          if (!existing || prog > existing) lastProgressMap.set(id, prog);
+        }
+      }
+    }
+
+    const now = Date.now();
+    return Array.from(setsMap.entries())
+      .map(([id, setsPerSession]) => {
+        const weeklySets = setsPerSession * 2;
+        const mg = MUSCLE_GROUPS.find((m) => m.id === id);
+        const mev = mg?.mev ?? 6;
+        const mav = mg?.mav ?? 14;
+        const mid = Math.round((mev + mav) / 2);
+        const tier: 1 | 2 | 3 = weeklySets >= mid ? 3 : weeklySets >= mev ? 2 : 1;
+        const lastProg = lastProgressMap.get(id) ?? null;
+        const daysSince = lastProg ? Math.floor((now - lastProg.getTime()) / 86_400_000) : null;
+        const overload: 'progressing' | 'stalled' | 'unknown' =
+          daysSince == null ? 'unknown' : daysSince <= STALE_DAYS ? 'progressing' : 'stalled';
+        return { id, label: mg?.label ?? id, sets: weeklySets, mev, mav, tier, overload, daysSince };
+      })
+      .sort((a, b) => b.sets - a.sets);
+  }, [exercises]);
+
+  // Push / Pull / Legs weekly sets balance
+  const pplBalance = useMemo(() => {
+    const totals = { push: 0, pull: 0, legs: 0 };
+    for (const ms of muscleStats) {
+      const cat = MUSCLE_CATEGORY[ms.id];
+      if (cat) totals[cat] += ms.sets;
+    }
+    return totals;
+  }, [muscleStats]);
+
+  // Build one artificial entry per muscle group so the library applies the correct color tier
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const modelData = useMemo(() => muscleStats.map((ms) => ({
+    name: ms.id,
+    muscles: (MUSCLE_GROUPS.find((mg) => mg.id === ms.id)?.libraryNames ?? []) as any[],
+    frequency: ms.tier,
+  })), [muscleStats]);
+
+  const taggedCount = exercises?.length ?? 0;
+  if (!taggedCount) return null;
+
+  const pplTotal = pplBalance.push + pplBalance.pull + pplBalance.legs || 1;
+  const pplItems = [
+    { label: 'Push', sets: pplBalance.push, color: '#007AFF' },
+    { label: 'Pull', sets: pplBalance.pull, color: '#34C759' },
+    { label: 'Legs', sets: pplBalance.legs, color: '#FF9500' },
+  ];
+
+  return (
+    <div className="bg-white rounded-2xl border border-border-subtle shadow-sm p-5 mb-5">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-bold text-secondary uppercase tracking-wider">Muscle coverage</p>
+        <span className="text-xs font-semibold text-secondary">{taggedCount} exercises tagged</span>
+      </div>
+
+      {/* Push / Pull / Legs balance */}
+      <div className="mb-5">
+        <p className="text-xs font-semibold text-secondary mb-2">Push / Pull / Legs balance</p>
+        <div className="flex rounded-xl overflow-hidden h-4 mb-2">
+          {pplItems.map(({ label, sets, color }) => (
+            <div
+              key={label}
+              style={{ width: `${(sets / pplTotal) * 100}%`, background: color }}
+              title={`${label}: ${sets} sets`}
+            />
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-1">
+          {pplItems.map(({ label, sets, color }) => (
+            <div key={label} className="flex flex-col items-center gap-0.5">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                <span className="text-xs font-bold text-primary">{label}</span>
+              </div>
+              <span className="text-sm font-bold text-primary">{Math.round((sets / pplTotal) * 100)}%</span>
+              <span className="text-xs text-secondary">{sets} sets</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-secondary text-center mt-2">Aim for pull ≥ push for shoulder health</p>
+      </div>
+
+      <div className="flex justify-center gap-4">
+        <Model
+          data={modelData}
+          highlightedColors={[TIER_COLORS[1].hex, TIER_COLORS[2].hex, TIER_COLORS[3].hex]}
+          bodyColor="#D1D5DB"
+          style={{ flex: 1, maxWidth: '150px' }}
+          svgStyle={{ height: '220px', width: '100%', display: 'block' }}
+          type="anterior"
+        />
+        <Model
+          data={modelData}
+          highlightedColors={[TIER_COLORS[1].hex, TIER_COLORS[2].hex, TIER_COLORS[3].hex]}
+          bodyColor="#D1D5DB"
+          style={{ flex: 1, maxWidth: '150px' }}
+          svgStyle={{ height: '220px', width: '100%', display: 'block' }}
+          type="posterior"
+        />
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-4 mb-1">
+        {([3, 2, 1] as const).map((tier) => (
+          <div key={tier} className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: TIER_COLORS[tier].hex }} />
+            <span className="text-xs text-secondary font-medium">
+              {tier === 3 ? 'Optimal' : tier === 2 ? 'Minimal (≥ MEV)' : 'Below MEV'}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="text-center text-xs text-secondary mt-1">weekly sets (2×/wk) vs MEV per muscle</p>
+
+      {muscleStats.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-4 justify-center">
+          {muscleStats.map(({ id, label, sets, mev, tier, overload, daysSince }) => (
+            <span
+              key={id}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl border flex items-center gap-1.5 ${TIER_COLORS[tier].chip}`}
+            >
+              {overload === 'progressing' && <span title={`Progressed ${daysSince}d ago`}>↑</span>}
+              {overload === 'stalled'     && <span className="opacity-60" title={`No progress in ${daysSince}d`}>!</span>}
+              {label}
+              <span className="font-semibold opacity-70">{sets}/{mev}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const REC_COLORS = {
+  high:   { bg: 'bg-accent-red/10',    border: 'border-accent-red/20',    text: 'text-accent-red',    dot: '#FF3B30' },
+  medium: { bg: 'bg-accent-orange/10', border: 'border-accent-orange/20', text: 'text-accent-orange', dot: '#FF9500' },
+  info:   { bg: 'bg-accent/10',        border: 'border-accent/20',        text: 'text-accent',        dot: '#007AFF' },
+} as const;
+
+type RecPriority = keyof typeof REC_COLORS;
+interface Rec { priority: RecPriority; title: string; detail: string }
+
+function Recommendations() {
+  const { data: exercises } = useQuery({
+    queryKey: ['muscle-stats'],
+    queryFn: () => statsApi.getMuscleStats().then((r) => r.data.data),
+  });
+
+  const recs = useMemo((): Rec[] => {
+    if (!exercises?.length) return [];
+
+    const setsMap = new Map<string, number>();
+    const lastProgressMap = new Map<string, Date>();
+    for (const ex of exercises) {
+      const prog = ex.lastProgressAt ? new Date(ex.lastProgressAt) : null;
+      for (const id of ex.muscleGroups) {
+        setsMap.set(id, (setsMap.get(id) ?? 0) + ex.sets);
+        if (prog) {
+          const existing = lastProgressMap.get(id);
+          if (!existing || prog > existing) lastProgressMap.set(id, prog);
+        }
+      }
+    }
+
+    const now = Date.now();
+    const stats = Array.from(setsMap.entries()).map(([id, perSession]) => {
+      const weeklySets = perSession * 2;
+      const mg = MUSCLE_GROUPS.find((m) => m.id === id);
+      const mev = mg?.mev ?? 6;
+      const label = mg?.label ?? id;
+      const lastProg = lastProgressMap.get(id) ?? null;
+      const d = lastProg ? Math.floor((now - lastProg.getTime()) / 86_400_000) : null;
+      const stalled = d != null && d > 14;
+      return { id, label, sets: weeklySets, mev, stalled, daysSince: d };
+    });
+
+    const ppl = { push: 0, pull: 0, legs: 0 };
+    for (const ms of stats) {
+      const cat = MUSCLE_CATEGORY[ms.id];
+      if (cat) ppl[cat] += ms.sets;
+    }
+
+    const result: Rec[] = [];
+    const handled = new Set<string>();
+
+    // 1. Progressive overload stalls — the primary driver of growth
+    for (const ms of stats.filter((s) => s.stalled).slice(0, 3)) {
+      handled.add(ms.id);
+      result.push({
+        priority: 'high',
+        title: `${ms.label} — no progress in ${ms.daysSince}d`,
+        detail: `Try adding weight (+2.5 kg) or 1 more rep on your next session before adding more sets. Overload is what drives hypertrophy.`,
+      });
+    }
+
+    // 2. Below MEV — not enough stimulus to grow (skip muscles already flagged above)
+    for (const ms of stats.filter((s) => s.sets < s.mev && !handled.has(s.id)).slice(0, 2)) {
+      result.push({
+        priority: 'medium',
+        title: `${ms.label} — too few sets to grow`,
+        detail: `${ms.sets} sets/wk is below the minimum effective volume of ${ms.mev}. Add more sets to get a training stimulus.`,
+      });
+    }
+
+    // 3. Push/pull imbalance — shoulder health and back development
+    if (ppl.push + ppl.pull > 0 && ppl.push > ppl.pull * 1.3) {
+      const deficit = ppl.push - ppl.pull;
+      result.push({
+        priority: 'medium',
+        title: 'More pulling needed',
+        detail: `Push: ${ppl.push} sets/wk vs Pull: ${ppl.pull}. Add ~${deficit} pull sets (rows, face pulls, pull-downs) to balance your shoulders.`,
+      });
+    }
+
+    return result.slice(0, 5);
+  }, [exercises]);
+
+  if (!exercises?.length) return null;
+
+  return (
+    <div className="bg-white rounded-2xl border border-border-subtle shadow-sm p-5 mb-5">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-bold text-secondary uppercase tracking-wider">Recommendations</p>
+        {recs.length > 0 && (
+          <span className="text-xs font-semibold text-secondary">{recs.length} insight{recs.length !== 1 ? 's' : ''}</span>
+        )}
+      </div>
+      {recs.length === 0 ? (
+        <div className="flex items-center gap-3 py-1">
+          <div className="w-8 h-8 rounded-full bg-accent-green/10 flex items-center justify-center flex-shrink-0">
+            <span className="text-accent-green text-base">✓</span>
+          </div>
+          <div>
+            <p className="text-sm font-bold text-accent-green">All looking good</p>
+            <p className="text-xs text-secondary mt-0.5">Volume and overload are on track. Keep progressing each session.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {recs.map((rec, i) => {
+            const c = REC_COLORS[rec.priority];
+            return (
+              <div key={i} className={`rounded-xl border px-4 py-3 ${c.bg} ${c.border}`}>
+                <div className="flex items-start gap-2.5">
+                  <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: c.dot }} />
+                  <div>
+                    <p className={`text-sm font-bold ${c.text}`}>{rec.title}</p>
+                    <p className="text-xs text-secondary mt-0.5 leading-relaxed">{rec.detail}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="text-xs text-secondary text-center mt-3">Based on Israetel et al. MEV/MAV ranges</p>
+    </div>
+  );
+}
+
 function BodyWeightSection() {
   const { data: entries } = useQuery({
     queryKey: ['body-weight'],
     queryFn: () => bodyWeightApi.getAll().then((r) => r.data.data),
   });
-  const chartData = entries?.slice().reverse().map((e) => ({ date: formatDate(e.recordedAt), weight: e.weight }));
+
+  const chartData = useMemo(() => {
+    if (!entries?.length) return [];
+    const sorted = [...entries].reverse();
+    const result = sorted.map((e) => ({ date: formatDate(e.recordedAt), weight: e.weight }));
+    const todayKey = new Date().toISOString().split('T')[0];
+    const lastKey = new Date(entries[0].recordedAt).toISOString().split('T')[0];
+    if (lastKey < todayKey) {
+      result.push({ date: formatDate(new Date().toISOString()), weight: entries[0].weight });
+    }
+    return result;
+  }, [entries]);
+
+  const yDomain = useMemo((): [number, number] | undefined => {
+    if (!chartData.length) return undefined;
+    const vals = chartData.map((d) => d.weight);
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const pad = Math.max((max - min) * 0.2, 2);
+    return [Math.floor(min - pad), Math.ceil(max + pad)];
+  }, [chartData]);
+
   const latest = entries?.[0];
   const first = entries?.[entries.length - 1];
   const delta = latest && first ? latest.weight - first.weight : null;
 
   if (!entries?.length) return null;
 
-  const tickInterval = chartData && chartData.length > 30
+  const tickInterval = chartData.length > 30
     ? Math.floor(chartData.length / 6)
-    : chartData && chartData.length > 10
+    : chartData.length > 10
     ? Math.floor(chartData.length / 4)
     : 0;
 
@@ -92,12 +406,12 @@ function BodyWeightSection() {
           <DeltaBadge delta={delta} />
         </div>
       </div>
-      {chartData && chartData.length > 1 && (
+      {chartData.length > 1 && (
         <ResponsiveContainer width="100%" height={140}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" />
             <XAxis dataKey="date" tick={{ fill: '#6E6E73', fontSize: 10 }} axisLine={false} tickLine={false} interval={tickInterval} />
-            <YAxis tick={{ fill: '#6E6E73', fontSize: 10 }} axisLine={false} tickLine={false} width={36} domain={['auto', 'auto']} />
+            <YAxis tick={{ fill: '#6E6E73', fontSize: 10 }} axisLine={false} tickLine={false} width={36} domain={yDomain ?? ['auto', 'auto']} />
             <Tooltip
               contentStyle={{ background: '#fff', border: '1px solid #C7C7CC', borderRadius: '10px', fontSize: '12px' }}
               labelStyle={{ color: '#6E6E73' }}
@@ -237,6 +551,40 @@ function DayStatsView({ dayId }: { dayId: string }) {
     enabled: !!dayId,
   });
 
+  // All hooks before early returns
+  const rawVolumeData = useMemo(() => {
+    const src = data?.volumeByDate ?? [];
+    if (!src.length) return src;
+    const todayKey = new Date().toISOString().split('T')[0];
+    const lastKey = src[src.length - 1].date;
+    if (lastKey < todayKey) {
+      return [...src, { ...src[src.length - 1], date: todayKey }];
+    }
+    return src;
+  }, [data?.volumeByDate]);
+
+  const metricKey = metric === 'volume' ? 'volume' : 'avgWeight';
+
+  const chartData = useMemo(() => rawVolumeData.map((d) => ({
+    date: formatDate(d.date),
+    volume: d.volume != null ? Math.round(d.volume) : null,
+    avgWeight: d.avgWeight,
+  })), [rawVolumeData]);
+
+  const validData = useMemo(
+    () => chartData.filter((d) => d[metricKey] != null),
+    [chartData, metricKey],
+  );
+
+  const yDomain = useMemo((): [number, number] | undefined => {
+    const nums = validData.map((d) => d[metricKey] as number);
+    if (!nums.length) return undefined;
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const pad = Math.max((max - min) * 0.2, 2);
+    return [Math.floor(min - pad), Math.ceil(max + pad)];
+  }, [validData, metricKey]);
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -246,24 +594,16 @@ function DayStatsView({ dayId }: { dayId: string }) {
   }
   if (!data) return null;
 
-  const chartData = data.volumeByDate.map((d) => ({
-    date: formatDate(d.date),
-    volume: d.volume != null ? Math.round(d.volume) : null,
-    avgWeight: d.avgWeight,
-  }));
-
   const xTickInterval = chartData.length > 30
     ? Math.floor(chartData.length / 6)
     : chartData.length > 10
     ? Math.floor(chartData.length / 4)
     : 0;
 
-  const metricKey = metric === 'volume' ? 'volume' : 'avgWeight';
   const metricLabel = metric === 'volume' ? 'Total volume' : 'Avg weight';
   const metricUnit = 'kg';
   const metricColor = metric === 'volume' ? '#007AFF' : '#FF9500';
 
-  const validData = chartData.filter((d) => d[metricKey] != null);
   const firstVal = validData[0]?.[metricKey] as number | undefined;
   const lastVal = validData[validData.length - 1]?.[metricKey] as number | undefined;
   const delta = firstVal != null && lastVal != null ? lastVal - firstVal : null;
@@ -307,7 +647,7 @@ function DayStatsView({ dayId }: { dayId: string }) {
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" />
               <XAxis dataKey="date" tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} interval={xTickInterval} />
-              <YAxis tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} width={metric === 'volume' ? 52 : 42} domain={['auto', 'auto']} />
+              <YAxis tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} width={metric === 'volume' ? 52 : 42} domain={yDomain ?? ['auto', 'auto']} />
               <Tooltip
                 contentStyle={{ background: '#fff', border: '1px solid #C7C7CC', borderRadius: '12px', fontSize: '13px' }}
                 labelStyle={{ color: '#6E6E73', fontWeight: '600' }}
@@ -389,6 +729,12 @@ export function Analytics() {
 
       {/* Summary cards */}
       <SummaryCards />
+
+      {/* Muscle map */}
+      <MuscleMap />
+
+      {/* Science-based recommendations */}
+      <Recommendations />
 
       {/* Body weight */}
       <BodyWeightSection />

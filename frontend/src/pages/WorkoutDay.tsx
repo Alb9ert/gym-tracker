@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor,
@@ -72,7 +73,7 @@ export function WorkoutDay() {
   }
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; sets: number; reps: string; weight: number | null; note: string | null }) =>
+    mutationFn: (data: { name: string; sets: number; reps: string; weight: number | null; note: string | null; muscleGroups: string[] }) =>
       exercisesApi.create(dayId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['exercises', dayId] });
@@ -150,8 +151,9 @@ export function WorkoutDay() {
         </DndContext>
       )}
 
-      <Button onClick={() => { setAddOpen(true); setFormError(null); }} className="w-full mt-5">
-        + Add exercise
+      <Button onClick={() => { setAddOpen(true); setFormError(null); }} className="w-full mt-5 gap-2">
+        <Plus size={16} strokeWidth={2.5} />
+        Add exercise
       </Button>
 
       <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="New exercise">

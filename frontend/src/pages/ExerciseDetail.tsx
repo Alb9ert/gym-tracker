@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { ChevronLeft, Pause } from 'lucide-react';
 import { progressApi } from '@/api/progress.api';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import type { ExerciseHistory } from '@/types';
 
-type Metric = 'weight' | 'reps' | 'volume';
+type Metric = 'weight' | 'reps' | 'volume' | 'e1rm';
 type Range = '7d' | '30d' | '90d' | 'all';
 
 const RANGES: { label: string; value: Range }[] = [
@@ -34,16 +35,26 @@ function computeVolume(sets: number, reps: string, weight: number | null): numbe
   return sets * parseReps(reps) * weight;
 }
 
+// Epley formula — most accurate at 1–10 reps
+function computeE1RM(reps: string, weight: number | null): number | null {
+  if (weight == null) return null;
+  const r = parseReps(reps);
+  if (r <= 0) return null;
+  return Math.round(weight * (1 + r / 30) * 10) / 10;
+}
+
 function metricValue(entry: ExerciseHistory, metric: Metric): number | null {
   if (metric === 'weight') return entry.weight;
   if (metric === 'reps') return parseReps(entry.reps);
-  return computeVolume(entry.sets, entry.reps, entry.weight);
+  if (metric === 'volume') return computeVolume(entry.sets, entry.reps, entry.weight);
+  return computeE1RM(entry.reps, entry.weight);
 }
 
 const METRIC_CONFIG: Record<Metric, { label: string; unit: string; color: string }> = {
-  weight: { label: 'Weight', unit: 'kg', color: '#007AFF' },
+  weight: { label: 'Weight', unit: 'kg',   color: '#007AFF' },
   reps:   { label: 'Reps',   unit: 'reps', color: '#34C759' },
-  volume: { label: 'Volume', unit: 'kg', color: '#FF9500' },
+  volume: { label: 'Volume', unit: 'kg',   color: '#FF9500' },
+  e1rm:   { label: '1RM',    unit: 'kg',   color: '#AF52DE' },
 };
 
 function utcMidnight(d: Date): Date {
@@ -189,9 +200,24 @@ export function ExerciseDetail() {
   const latestVal = chartData[chartData.length - 1]?.value;
   const delta = firstVal != null && latestVal != null ? latestVal - firstVal : null;
 
+  const bestE1RM = useMemo(() => {
+    if (metric !== 'e1rm') return null;
+    const vals = history.map((e) => computeE1RM(e.reps, e.weight)).filter((v): v is number => v != null);
+    return vals.length ? Math.max(...vals) : null;
+  }, [history, metric]);
+
   // stepAfter for multi-day carry-forward, monotone for same-day time-based fallback
   const isSameDay = chartData[0]?.date.includes(':');
   const lineType = isSameDay ? 'monotone' : 'stepAfter';
+
+  const yDomain = useMemo((): [number, number] | undefined => {
+    if (!chartData.length) return undefined;
+    const vals = chartData.map((d) => d.value);
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const pad = Math.max((max - min) * 0.2, 2);
+    return [Math.floor(min - pad), Math.ceil(max + pad)];
+  }, [chartData]);
 
   // Only show every Nth label so X-axis isn't crowded
   const xTickInterval = chartData.length > 60 ? Math.floor(chartData.length / 8)
@@ -204,9 +230,10 @@ export function ExerciseDetail() {
       <div className="flex items-center gap-3 mb-6">
         <button
           onClick={() => navigate(-1)}
-          className="text-accent text-sm font-semibold bg-accent/10 px-3 py-1.5 rounded-lg active:bg-accent/20"
+          className="flex items-center gap-1 text-accent text-sm font-semibold bg-accent/10 px-3 py-1.5 rounded-lg active:bg-accent/20"
         >
-          ← Back
+          <ChevronLeft size={16} strokeWidth={2.5} />
+          Back
         </button>
         <h1 className="text-2xl font-bold tracking-tight text-primary flex-1 truncate">
           {isLoading ? '…' : chartRes?.exerciseName}
@@ -216,7 +243,7 @@ export function ExerciseDetail() {
       {/* Paused banner */}
       {isPaused && (
         <div className="flex items-center gap-2 bg-gray-100 border border-border-subtle rounded-xl px-4 py-3 mb-5 text-sm text-secondary font-medium">
-          <span>⏸</span>
+          <Pause size={14} strokeWidth={2} className="flex-shrink-0" />
           <span>This exercise is paused — history is preserved, no active progress shown.</span>
         </div>
       )}
@@ -225,13 +252,23 @@ export function ExerciseDetail() {
       {latestVal != null && (
         <div className="flex gap-3 mb-5">
           <div className="flex-1 bg-white rounded-2xl border border-border-subtle shadow-sm px-4 py-3">
-            <p className="text-xs font-semibold text-secondary uppercase tracking-wider">Current</p>
+            <p className="text-xs font-semibold text-secondary uppercase tracking-wider">
+              {metric === 'e1rm' ? 'Est. 1RM' : 'Current'}
+            </p>
             <p className="text-xl font-bold text-primary mt-0.5">
               {latestVal % 1 === 0 ? latestVal : latestVal.toFixed(1)}{' '}
               <span className="text-sm font-semibold text-secondary">{cfg.unit}</span>
             </p>
           </div>
-          {delta != null && (
+          {metric === 'e1rm' && bestE1RM != null ? (
+            <div className="flex-1 bg-white rounded-2xl border border-border-subtle shadow-sm px-4 py-3">
+              <p className="text-xs font-semibold text-secondary uppercase tracking-wider">Best ever</p>
+              <p className="text-xl font-bold text-violet-600 mt-0.5">
+                {bestE1RM % 1 === 0 ? bestE1RM : bestE1RM.toFixed(1)}{' '}
+                <span className="text-sm font-semibold">{cfg.unit}</span>
+              </p>
+            </div>
+          ) : delta != null ? (
             <div className="flex-1 bg-white rounded-2xl border border-border-subtle shadow-sm px-4 py-3">
               <p className="text-xs font-semibold text-secondary uppercase tracking-wider">Total gain</p>
               <p className={`text-xl font-bold mt-0.5 ${delta >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
@@ -239,7 +276,7 @@ export function ExerciseDetail() {
                 <span className="text-sm font-semibold">{cfg.unit}</span>
               </p>
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -291,7 +328,7 @@ export function ExerciseDetail() {
                 axisLine={false}
                 tickLine={false}
                 width={metric === 'volume' ? 52 : 40}
-                domain={['auto', 'auto']}
+                domain={yDomain ?? ['auto', 'auto']}
               />
               <Tooltip content={<CustomTooltip unit={cfg.unit} />} />
               <Line
@@ -307,12 +344,17 @@ export function ExerciseDetail() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl p-5 mb-5 border border-border-subtle text-center text-secondary text-sm">
-          {metric === 'volume' && history.some((e) => e.weight == null)
-            ? 'Set a weight on this exercise to track volume'
+          {(metric === 'volume' || metric === 'e1rm') && history.some((e) => e.weight == null)
+            ? 'Set a weight on this exercise to track this metric'
             : chartData.length === 0 && range !== 'all'
             ? 'No changes in this time range — try "All"'
             : 'Chart appears after you change the weight or reps for the first time'}
         </div>
+      )}
+      {metric === 'e1rm' && chartData.length > 0 && (
+        <p className="text-xs text-secondary text-center -mt-3 mb-5">
+          Epley formula · weight × (1 + reps/30) · most accurate at 1–10 reps
+        </p>
       )}
 
       {/* History filters */}
@@ -362,6 +404,11 @@ export function ExerciseDetail() {
                 {entry.weight != null && (
                   <span className="bg-gray-100 text-secondary text-xs font-semibold px-2 py-0.5 rounded-md">
                     {(entry.sets * parseReps(entry.reps) * entry.weight).toFixed(0)} kg vol
+                  </span>
+                )}
+                {entry.weight != null && computeE1RM(entry.reps, entry.weight) != null && (
+                  <span className="bg-violet-50 text-violet-600 text-xs font-semibold px-2 py-0.5 rounded-md">
+                    ~{computeE1RM(entry.reps, entry.weight)} kg 1RM
                   </span>
                 )}
               </div>

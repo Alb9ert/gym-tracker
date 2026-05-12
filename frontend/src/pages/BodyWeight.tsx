@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { bodyWeightApi } from '@/api/bodyWeight.api';
 import { getErrorMessage } from '@/utils/errors';
@@ -41,10 +41,27 @@ export function BodyWeight() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['body-weight'] }),
   });
 
-  const chartData = entries?.slice().reverse().map((e) => ({
-    date: formatDate(e.recordedAt),
-    weight: e.weight,
-  }));
+  const chartData = useMemo(() => {
+    if (!entries?.length) return [];
+    const sorted = [...entries].reverse(); // oldest first
+    const result = sorted.map((e) => ({ date: formatDate(e.recordedAt), weight: e.weight }));
+    // Extend flat line to today if the latest entry isn't today
+    const todayKey = new Date().toISOString().split('T')[0];
+    const lastKey = new Date(entries[0].recordedAt).toISOString().split('T')[0];
+    if (lastKey < todayKey) {
+      result.push({ date: formatDate(new Date().toISOString()), weight: entries[0].weight });
+    }
+    return result;
+  }, [entries]);
+
+  const yDomain = useMemo((): [number, number] | undefined => {
+    if (!chartData.length) return undefined;
+    const vals = chartData.map((d) => d.weight);
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const pad = Math.max((max - min) * 0.2, 2);
+    return [Math.floor(min - pad), Math.ceil(max + pad)];
+  }, [chartData]);
 
   const latest = entries?.[0];
 
@@ -61,14 +78,14 @@ export function BodyWeight() {
       </div>
 
       {/* Chart */}
-      {chartData && chartData.length > 1 && (
+      {chartData.length > 1 && (
         <div className="bg-white rounded-2xl p-5 mb-5 border border-border-subtle shadow-sm">
           <p className="text-xs font-bold text-secondary uppercase tracking-wider mb-4">Weight over time</p>
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" />
               <XAxis dataKey="date" tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
+              <YAxis tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} width={35} domain={yDomain ?? ['auto', 'auto']} />
               <Tooltip
                 contentStyle={{
                   background: '#fff',

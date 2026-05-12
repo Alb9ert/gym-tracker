@@ -3,6 +3,7 @@ import type { Exercise } from '@/types';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
+import { MUSCLE_GROUPS } from '@/constants/muscles';
 
 interface FormData {
   name: string;
@@ -10,6 +11,7 @@ interface FormData {
   reps: string;
   weight: number | null;
   note: string | null;
+  muscleGroups: string[];
 }
 
 interface Props {
@@ -26,6 +28,13 @@ export function ExerciseForm({ initial, onSubmit, loading, error, submitLabel = 
   const [reps, setReps] = useState(initial?.reps ?? '10');
   const [weight, setWeight] = useState(initial?.weight != null ? String(initial.weight) : '');
   const [note, setNote] = useState(initial?.note ?? '');
+  const [muscleGroups, setMuscleGroups] = useState<string[]>(initial?.muscleGroups ?? []);
+
+  function toggleMuscle(id: string) {
+    setMuscleGroups((prev) =>
+      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
+    );
+  }
 
   function handleSubmit() {
     const parsedWeight = weight.trim() === '' ? null : parseFloat(weight);
@@ -35,6 +44,7 @@ export function ExerciseForm({ initial, onSubmit, loading, error, submitLabel = 
       reps: reps.trim(),
       weight: parsedWeight,
       note: note.trim() || null,
+      muscleGroups,
     });
   }
 
@@ -94,6 +104,31 @@ export function ExerciseForm({ initial, onSubmit, loading, error, submitLabel = 
         {note.length > 240 && (
           <p className="text-xs text-secondary text-right">{note.length}/300</p>
         )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-semibold text-secondary">
+          Muscles <span className="font-normal text-gray-400">(optional)</span>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {MUSCLE_GROUPS.map((mg) => {
+            const selected = muscleGroups.includes(mg.id);
+            return (
+              <button
+                key={mg.id}
+                type="button"
+                onClick={() => toggleMuscle(mg.id)}
+                className={`px-3 py-1.5 rounded-xl text-sm font-semibold border transition-all ${
+                  selected
+                    ? 'bg-accent text-white border-accent'
+                    : 'bg-white text-secondary border-border-subtle active:bg-gray-50'
+                }`}
+              >
+                {mg.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <ErrorMessage message={error} />

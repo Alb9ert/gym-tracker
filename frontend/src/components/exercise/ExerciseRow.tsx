@@ -2,6 +2,7 @@ import { forwardRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Pencil, Trash2, Play, Pause, ArrowUp } from 'lucide-react';
 import { exercisesApi } from '@/api/exercises.api';
 import type { Exercise } from '@/types';
 
@@ -82,7 +83,6 @@ export function ExerciseRow({ exercise, dayId, onEdit, onDelete, onViewProgress 
     >
       {/* Main content row */}
       <div className="flex items-start gap-2 px-3 pt-4 pb-2">
-        {/* Drag handle — only this element is the drag activator */}
         <DragHandle ref={setActivatorNodeRef} {...listeners} />
 
         <button className="flex-1 text-left min-w-0" onClick={inactive ? undefined : onViewProgress}>
@@ -107,18 +107,21 @@ export function ExerciseRow({ exercise, dayId, onEdit, onDelete, onViewProgress 
           )}
         </button>
 
-        <div className="flex gap-2 flex-shrink-0">
+        {/* Edit / Delete icon buttons */}
+        <div className="flex gap-1 flex-shrink-0 pt-0.5">
           <button
             onClick={onEdit}
-            className="text-accent text-sm font-semibold px-3 py-1.5 bg-accent/10 rounded-lg active:bg-accent/20"
+            className="w-8 h-8 flex items-center justify-center rounded-xl text-accent bg-accent/10 active:bg-accent/20"
+            aria-label="Edit exercise"
           >
-            Edit
+            <Pencil size={15} strokeWidth={2} />
           </button>
           <button
             onClick={onDelete}
-            className="text-accent-red text-sm font-semibold px-3 py-1.5 bg-accent-red/10 rounded-lg active:bg-accent-red/20"
+            className="w-8 h-8 flex items-center justify-center rounded-xl text-accent-red bg-accent-red/10 active:bg-accent-red/20"
+            aria-label="Delete exercise"
           >
-            Del
+            <Trash2 size={15} strokeWidth={2} />
           </button>
         </div>
       </div>
@@ -133,7 +136,7 @@ export function ExerciseRow({ exercise, dayId, onEdit, onDelete, onViewProgress 
               : 'bg-gray-100 text-gray-400 border-transparent'
           }`}
         >
-          <span className="text-sm">↑</span> kg
+          <ArrowUp size={11} strokeWidth={2.5} /> kg
         </button>
 
         <button
@@ -144,16 +147,23 @@ export function ExerciseRow({ exercise, dayId, onEdit, onDelete, onViewProgress 
               : 'bg-gray-100 text-gray-400 border-transparent'
           }`}
         >
-          <span className="text-sm">↑</span> reps
+          <ArrowUp size={11} strokeWidth={2.5} /> reps
         </button>
 
         <div className="flex-1" />
 
         <button
           onClick={() => toggleMutation.mutate({ isActive: !exercise.isActive })}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border bg-gray-100 text-secondary border-transparent"
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+            inactive
+              ? 'bg-gray-100 text-gray-400 border-transparent'
+              : 'bg-accent-green/10 text-accent-green border-accent-green/20'
+          }`}
         >
-          {inactive ? <><span>▷</span> Paused</> : <><span>⏸</span> Active</>}
+          {inactive
+            ? <><Play size={11} strokeWidth={2.5} /> Paused</>
+            : <><Pause size={11} strokeWidth={2.5} /> Active</>
+          }
         </button>
       </div>
     </div>

@@ -32,10 +32,13 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload {
 
 export const REFRESH_COOKIE_NAME = 'refresh_token';
 
+const isProd = env.NODE_ENV === 'production';
+
 export const refreshCookieOptions = {
   httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
-  maxAge: 60 * 24 * 60 * 60 * 1000, // 60 days in ms
+  secure: isProd,
+  // 'none' required for cross-origin (Vercel → Railway); 'lax' for local dev
+  sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
+  maxAge: 60 * 24 * 60 * 60 * 1000, // 60 days
   path: '/',
 };

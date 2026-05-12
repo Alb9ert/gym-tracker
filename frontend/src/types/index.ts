@@ -25,6 +25,7 @@ export interface Exercise {
   isActive: boolean;
   goalWeight: boolean;
   goalReps: boolean;
+  muscleGroups: string[];
   order: number;
   createdAt: string;
   updatedAt: string;

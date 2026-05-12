@@ -41,6 +41,15 @@ export interface StaleExercise {
   lastChangedAt: string | null;
 }
 
+export interface MuscleExercise {
+  name: string;
+  muscleGroups: string[];
+  sets: number;
+  reps: string;
+  weight: number | null;
+  lastProgressAt: string | null;
+}
+
 export const statsApi = {
   getSummary: () =>
     apiClient.get<{ success: true; data: StatsSummary }>('/api/stats/summary'),
@@ -50,4 +59,7 @@ export const statsApi = {
 
   getStaleExercises: () =>
     apiClient.get<{ success: true; data: StaleExercise[] }>('/api/stats/stale'),
+
+  getMuscleStats: () =>
+    apiClient.get<{ success: true; data: MuscleExercise[] }>('/api/stats/muscles'),
 };

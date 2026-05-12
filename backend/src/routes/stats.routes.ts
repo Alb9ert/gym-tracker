@@ -7,6 +7,7 @@ router.use(authenticate);
 
 router.get('/summary', controller.getSummary);
 router.get('/stale', controller.getStaleExercises);
+router.get('/muscles', controller.getMuscleStats);
 router.get('/day/:dayId', controller.getDayStats);
 
 export default router;

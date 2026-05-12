@@ -11,6 +11,7 @@ export interface IExercise extends Document {
   isActive: boolean;
   goalWeight: boolean;
   goalReps: boolean;
+  muscleGroups: string[];
   order: number;
   createdAt: Date;
   updatedAt: Date;
@@ -27,6 +28,7 @@ const exerciseSchema = new Schema<IExercise>(
     order: { type: Number, required: true, default: 0 },
     note: { type: String, default: null, trim: true, maxlength: 300 },
     isActive: { type: Boolean, default: true },
+    muscleGroups: { type: [String], default: [] },
     goalWeight: { type: Boolean, default: false },
     goalReps: { type: Boolean, default: false },
   },

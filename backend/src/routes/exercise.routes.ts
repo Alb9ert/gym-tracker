@@ -13,6 +13,7 @@ const createSchema = z.object({
   reps: z.string().min(1, 'Reps is required').max(20),
   weight: z.number().min(0).nullable().default(null),
   note: z.string().max(300).nullable().default(null),
+  muscleGroups: z.array(z.string()).default([]),
 });
 
 const updateSchema = z.object({
@@ -24,6 +25,7 @@ const updateSchema = z.object({
   isActive: z.boolean().optional(),
   goalWeight: z.boolean().optional(),
   goalReps: z.boolean().optional(),
+  muscleGroups: z.array(z.string()).optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'At least one field required' });
 
 const reorderSchema = z.object({ orderedIds: z.array(z.string()).min(1) });

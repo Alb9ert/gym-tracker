@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ChevronRight, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { workoutDaysApi } from '@/api/workoutDays.api';
 import { authApi } from '@/api/auth.api';
@@ -107,7 +108,7 @@ export function Dashboard() {
               >
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-semibold text-primary">{day.name}</span>
-                  <span className="text-secondary text-lg">›</span>
+                  <ChevronRight size={18} className="text-gray-300 flex-shrink-0" />
                 </div>
               </button>
               <div className="flex gap-2 px-5 pb-3 border-t border-border-subtle pt-2.5 bg-gray-50">
@@ -140,8 +141,9 @@ export function Dashboard() {
         </div>
       )}
 
-      <Button onClick={openAdd} className="w-full mt-5">
-        + Add workout day
+      <Button onClick={openAdd} className="w-full mt-5 gap-2">
+        <Plus size={16} strokeWidth={2.5} />
+        Add workout day
       </Button>
 
       {/* Add sheet */}

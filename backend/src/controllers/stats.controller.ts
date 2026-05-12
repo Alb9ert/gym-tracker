@@ -26,3 +26,10 @@ export async function getStaleExercises(req: Request, res: Response, next: NextF
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
+
+export async function getMuscleStats(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await service.getMuscleStats(uid(req));
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}

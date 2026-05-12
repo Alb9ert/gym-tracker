@@ -166,3 +166,47 @@ export async function getDayStats(userId: string, dayId: string) {
     exercises: exerciseSummaries,
   };
 }
+
+// Maps old muscle group IDs to new split IDs after the back/shoulder breakdown refactor
+const MUSCLE_ID_MIGRATION: Record<string, string[]> = {
+  back:      ['lats', 'upper-back'],
+  shoulders: ['side-delts'],
+};
+
+export async function getMuscleStats(userId: string) {
+  // Migrate any exercises still using legacy IDs (idempotent)
+  const legacyIds = Object.keys(MUSCLE_ID_MIGRATION);
+  const stale = await Exercise.find({ userId, muscleGroups: { $in: legacyIds } });
+  for (const ex of stale) {
+    ex.muscleGroups = [...new Set(
+      ex.muscleGroups.flatMap((id) => MUSCLE_ID_MIGRATION[id] ?? [id])
+    )];
+    await ex.save();
+  }
+
+  const exercises = await Exercise.find({ userId, isActive: true })
+    .select('name muscleGroups sets reps weight')
+    .lean();
+
+  // Last date each exercise had a weight or reps increase
+  const exerciseIds = exercises.map((ex) => ex._id);
+  const lastProgressRows = await ExerciseHistory.aggregate([
+    { $match: { exerciseId: { $in: exerciseIds }, changedFields: { $in: ['weight', 'reps'] } } },
+    { $sort: { recordedAt: -1 } },
+    { $group: { _id: '$exerciseId', lastProgressAt: { $first: '$recordedAt' } } },
+  ]);
+  const lastProgressMap = new Map<string, Date>(
+    lastProgressRows.map((r) => [String(r._id), r.lastProgressAt as Date])
+  );
+
+  return exercises
+    .filter((ex) => ex.muscleGroups && ex.muscleGroups.length > 0)
+    .map((ex) => ({
+      name: ex.name,
+      muscleGroups: ex.muscleGroups,
+      sets: ex.sets,
+      reps: ex.reps,
+      weight: ex.weight ?? null,
+      lastProgressAt: lastProgressMap.get(String(ex._id))?.toISOString() ?? null,
+    }));
+}

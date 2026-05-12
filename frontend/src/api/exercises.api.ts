@@ -6,6 +6,8 @@ interface CreateExerciseData {
   sets: number;
   reps: string;
   weight: number | null;
+  note?: string | null;
+  muscleGroups?: string[];
 }
 
 interface UpdateExerciseData {
@@ -17,6 +19,7 @@ interface UpdateExerciseData {
   isActive?: boolean;
   goalWeight?: boolean;
   goalReps?: boolean;
+  muscleGroups?: string[];
 }
 
 export const exercisesApi = {
