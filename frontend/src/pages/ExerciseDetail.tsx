@@ -118,7 +118,12 @@ function buildContinuousSeries(
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
-  return result;
+  // Subsample long series so the chart never has more than ~24 data points.
+  // Always keep first and last so the full time span is visible.
+  const MAX = 24;
+  if (result.length <= MAX) return result;
+  const step = Math.ceil(result.length / MAX);
+  return result.filter((_, i) => i % step === 0 || i === result.length - 1);
 }
 
 function CustomTooltip({
@@ -219,10 +224,7 @@ export function ExerciseDetail() {
     return [Math.floor(min - pad), Math.ceil(max + pad)];
   }, [chartData]);
 
-  // Only show every Nth label so X-axis isn't crowded
-  const xTickInterval = chartData.length > 60 ? Math.floor(chartData.length / 8)
-    : chartData.length > 20 ? Math.floor(chartData.length / 6)
-    : 0;
+  const xTickInterval = Math.max(0, Math.ceil(chartData.length / 5) - 1);
 
   return (
     <div className="px-5 pt-14 pb-6">
@@ -315,7 +317,7 @@ export function ExerciseDetail() {
         <div className="bg-white rounded-2xl p-5 mb-5 border border-border-subtle shadow-sm">
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" vertical={false} />
               <XAxis
                 dataKey="date"
                 tick={{ fill: '#6E6E73', fontSize: 11 }}

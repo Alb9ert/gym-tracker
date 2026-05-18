@@ -409,7 +409,7 @@ function BodyWeightSection() {
       {chartData.length > 1 && (
         <ResponsiveContainer width="100%" height={140}>
           <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" vertical={false} />
             <XAxis dataKey="date" tick={{ fill: '#6E6E73', fontSize: 10 }} axisLine={false} tickLine={false} interval={tickInterval} />
             <YAxis tick={{ fill: '#6E6E73', fontSize: 10 }} axisLine={false} tickLine={false} width={36} domain={yDomain ?? ['auto', 'auto']} />
             <Tooltip
@@ -552,24 +552,48 @@ function DayStatsView({ dayId }: { dayId: string }) {
   });
 
   // All hooks before early returns
-  const rawVolumeData = useMemo(() => {
-    const src = data?.volumeByDate ?? [];
-    if (!src.length) return src;
-    const todayKey = new Date().toISOString().split('T')[0];
-    const lastKey = src[src.length - 1].date;
-    if (lastKey < todayKey) {
-      return [...src, { ...src[src.length - 1], date: todayKey }];
-    }
-    return src;
-  }, [data?.volumeByDate]);
-
   const metricKey = metric === 'volume' ? 'volume' : 'avgWeight';
 
-  const chartData = useMemo(() => rawVolumeData.map((d) => ({
-    date: formatDate(d.date),
-    volume: d.volume != null ? Math.round(d.volume) : null,
-    avgWeight: d.avgWeight,
-  })), [rawVolumeData]);
+  // Build a carry-forward daily series then subsample to ~24 evenly-spaced points.
+  // This gives a step chart that spans the full time range with a regular x-axis.
+  const chartData = useMemo(() => {
+    const src = data?.volumeByDate ?? [];
+    if (!src.length) return [];
+
+    const byDate = new Map(src.map((d) => [d.date, d]));
+    const firstDate = new Date(src[0].date + 'T00:00:00Z');
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const full: { date: string; volume: number | null; avgWeight: number | null }[] = [];
+    let lastVol: number | null = null;
+    let lastAvg: number | null = null;
+    const cursor = new Date(firstDate);
+
+    while (cursor <= today) {
+      const key = cursor.toISOString().split('T')[0];
+      if (byDate.has(key)) {
+        const d = byDate.get(key)!;
+        lastVol = d.volume;
+        lastAvg = d.avgWeight;
+      }
+      if (lastVol != null || lastAvg != null) {
+        full.push({ date: key, volume: lastVol, avgWeight: lastAvg });
+      }
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    const MAX = 24;
+    const sampled = full.length > MAX
+      ? full.filter((_, i) => i % Math.ceil(full.length / MAX) === 0 || i === full.length - 1)
+      : full;
+
+    return sampled.map((d) => ({
+      date: formatDate(d.date),
+      volume: d.volume != null ? Math.round(d.volume) : null,
+      avgWeight: d.avgWeight,
+    }));
+  }, [data?.volumeByDate]);
 
   const validData = useMemo(
     () => chartData.filter((d) => d[metricKey] != null),
@@ -593,12 +617,6 @@ function DayStatsView({ dayId }: { dayId: string }) {
     );
   }
   if (!data) return null;
-
-  const xTickInterval = chartData.length > 30
-    ? Math.floor(chartData.length / 6)
-    : chartData.length > 10
-    ? Math.floor(chartData.length / 4)
-    : 0;
 
   const metricLabel = metric === 'volume' ? 'Total volume' : 'Avg weight';
   const metricUnit = 'kg';
@@ -645,8 +663,14 @@ function DayStatsView({ dayId }: { dayId: string }) {
         {validData.length > 1 ? (
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" />
-              <XAxis dataKey="date" tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} interval={xTickInterval} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E5EA" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: '#6E6E73', fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                interval={Math.max(0, Math.ceil(chartData.length / 5) - 1)}
+              />
               <YAxis tick={{ fill: '#6E6E73', fontSize: 11 }} axisLine={false} tickLine={false} width={metric === 'volume' ? 52 : 42} domain={yDomain ?? ['auto', 'auto']} />
               <Tooltip
                 contentStyle={{ background: '#fff', border: '1px solid #C7C7CC', borderRadius: '12px', fontSize: '13px' }}
