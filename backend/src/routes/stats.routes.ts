@@ -9,5 +9,6 @@ router.get('/summary', controller.getSummary);
 router.get('/stale', controller.getStaleExercises);
 router.get('/muscles', controller.getMuscleStats);
 router.get('/day/:dayId', controller.getDayStats);
+router.get('/strength-rankings', controller.getStrengthRankings);
 
 export default router;

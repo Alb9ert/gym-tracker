@@ -50,6 +50,18 @@ export interface MuscleExercise {
   lastProgressAt: string | null;
 }
 
+export interface StrengthRankings {
+  bodyWeight: number | null;
+  muscleGroups: Record<string, {
+    current1RM: number;
+    start1RM: number;
+    effectiveWeight: number;
+    currentRatio: number | null;
+    startRatio: number | null;
+    exerciseName: string;
+  }>;
+}
+
 export const statsApi = {
   getSummary: () =>
     apiClient.get<{ success: true; data: StatsSummary }>('/api/stats/summary'),
@@ -62,4 +74,7 @@ export const statsApi = {
 
   getMuscleStats: () =>
     apiClient.get<{ success: true; data: MuscleExercise[] }>('/api/stats/muscles'),
+
+  getStrengthRankings: () =>
+    apiClient.get<{ success: true; data: StrengthRankings }>('/api/stats/strength-rankings'),
 };

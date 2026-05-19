@@ -167,6 +167,122 @@ export async function getDayStats(userId: string, dayId: string) {
   };
 }
 
+export async function getStrengthRankings(userId: string) {
+  const [exercises, latestBW] = await Promise.all([
+    Exercise.find({ userId, isActive: true })
+      .select('name muscleGroups sets reps weight')
+      .lean(),
+    BodyWeightHistory.findOne({ userId }).sort({ recordedAt: -1 }).lean(),
+  ]);
+
+  const bodyWeight = latestBW?.weight ?? null;
+
+  const exerciseIds = exercises.map((e) => e._id);
+
+  // Count weighted history entries per exercise — most-tracked = primary indicator
+  const [historyCountRows, firstHistoryRows] = await Promise.all([
+    ExerciseHistory.aggregate([
+      { $match: { exerciseId: { $in: exerciseIds }, userId: new Types.ObjectId(userId), weight: { $ne: null } } },
+      { $group: { _id: '$exerciseId', count: { $sum: 1 } } },
+    ]),
+    // First entry per exercise for "started" comparison
+    ExerciseHistory.aggregate([
+      { $match: { exerciseId: { $in: exerciseIds }, userId: new Types.ObjectId(userId), weight: { $ne: null } } },
+      { $sort: { recordedAt: 1 } },
+      { $group: { _id: '$exerciseId', firstWeight: { $first: '$weight' }, firstReps: { $first: '$reps' } } },
+    ]),
+  ]);
+
+  const historyCountMap = new Map(historyCountRows.map((r) => [String(r._id), r.count as number]));
+  const firstHistMap = new Map<string, { firstWeight: number; firstReps: string }>();
+  firstHistoryRows.forEach((r) => firstHistMap.set(String(r._id), r as { firstWeight: number; firstReps: string }));
+
+  // Epley 1RM estimate
+  const epley = (weight: number, reps: number) => weight * (1 + reps / 30);
+
+  // User enters one-side weight for all barbell and dumbbell exercises (no bar weight included).
+  // Cable / machine stack exercises are entered as total weight — no correction needed.
+  function effectiveWeight(name: string, weight: number): number {
+    const n = name.toLowerCase();
+
+    // Smith machine: one side (plate) → ×2 + 11 kg bar
+    if (n.includes('smith')) return weight * 2 + 11;
+
+    // Standard barbell exercises: one side (plate) → ×2 + 20 kg bar
+    if (n.includes('barbell') || n.includes('bent over row') || n.includes('bb row') ||
+        n.includes('pendlay') || n.includes('reverse curl')) return weight * 2 + 20;
+
+    // Dumbbell PRESSING movements (bilateral): one dumbbell → ×2, no bar
+    if ((n.includes('dumbbell') || n.includes('dumbell')) && n.includes('press')) return weight * 2;
+
+    // Cable / machine / isolation dumbbells: full weight as entered
+    return weight;
+  }
+
+  // Selection priority: prefer exercises where the target muscle is FIRST in the list
+  // (primary target), then break ties by history count, then by 1RM.
+  // This stops a bench press (chest primary, triceps secondary) from overriding
+  // a tricep rope extension when ranking the triceps muscle group.
+  type BestEntry = { current1RM: number; start1RM: number; effectiveWt: number; exerciseName: string; histCount: number; isPrimary: boolean };
+  const mgBest = new Map<string, BestEntry>();
+
+  for (const ex of exercises) {
+    if (!ex.weight || !ex.muscleGroups?.length) continue;
+
+    const exId = String(ex._id);
+    const histCount = historyCountMap.get(exId) ?? 0;
+    const adjWeight = effectiveWeight(ex.name, ex.weight);
+    const currentReps = parseReps(ex.reps);
+    const current1RM = epley(adjWeight, currentReps);
+
+    const firstH = firstHistMap.get(exId);
+    const firstAdjWeight = firstH ? effectiveWeight(ex.name, firstH.firstWeight) : adjWeight;
+    const start1RM = firstH
+      ? epley(firstAdjWeight, parseReps(firstH.firstReps))
+      : current1RM;
+
+    for (let i = 0; i < ex.muscleGroups.length; i++) {
+      const mg = ex.muscleGroups[i];
+      const isPrimary = i === 0;
+      const existing = mgBest.get(mg);
+
+      let isBetter = !existing;
+      if (existing) {
+        if (isPrimary && !existing.isPrimary) isBetter = true;
+        else if (isPrimary === existing.isPrimary) {
+          isBetter = histCount > existing.histCount
+            || (histCount === existing.histCount && current1RM > existing.current1RM);
+        }
+      }
+      if (isBetter) {
+        mgBest.set(mg, { current1RM, start1RM, effectiveWt: adjWeight, exerciseName: ex.name, histCount, isPrimary });
+      }
+    }
+  }
+
+  const muscleGroups: Record<string, {
+    current1RM: number;
+    start1RM: number;
+    effectiveWeight: number;
+    currentRatio: number | null;
+    startRatio: number | null;
+    exerciseName: string;
+  }> = {};
+
+  for (const [mg, data] of mgBest.entries()) {
+    muscleGroups[mg] = {
+      current1RM: Math.round(data.current1RM * 10) / 10,
+      start1RM: Math.round(data.start1RM * 10) / 10,
+      effectiveWeight: Math.round(data.effectiveWt * 10) / 10,
+      currentRatio: bodyWeight ? Math.round((data.current1RM / bodyWeight) * 1000) / 1000 : null,
+      startRatio: bodyWeight ? Math.round((data.start1RM / bodyWeight) * 1000) / 1000 : null,
+      exerciseName: data.exerciseName,
+    };
+  }
+
+  return { bodyWeight, muscleGroups };
+}
+
 // Maps old muscle group IDs to new split IDs after the back/shoulder breakdown refactor
 const MUSCLE_ID_MIGRATION: Record<string, string[]> = {
   back:      ['lats', 'upper-back'],

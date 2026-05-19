@@ -12,6 +12,7 @@ import { ExerciseDetail } from '@/pages/ExerciseDetail';
 import { BodyWeight } from '@/pages/BodyWeight';
 import { Analytics } from '@/pages/Analytics';
 import { GymVisits } from '@/pages/GymVisits';
+import { Strength } from '@/pages/Strength';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,6 +68,7 @@ export function App() {
               <Route path="/body-weight" element={<BodyWeight />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/gym" element={<GymVisits />} />
+              <Route path="/strength" element={<Strength />} />
             </Route>
           </Route>
 

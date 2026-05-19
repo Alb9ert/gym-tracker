@@ -33,3 +33,10 @@ export async function getMuscleStats(req: Request, res: Response, next: NextFunc
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
+
+export async function getStrengthRankings(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await service.getStrengthRankings(uid(req));
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}

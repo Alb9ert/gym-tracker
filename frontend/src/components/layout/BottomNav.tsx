@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { Dumbbell, CalendarCheck, Scale, TrendingUp } from 'lucide-react';
+import { Dumbbell, CalendarCheck, Scale, TrendingUp, Trophy } from 'lucide-react';
 
 const navItems = [
   { to: '/',            label: 'Workouts', Icon: Dumbbell },
   { to: '/gym',         label: 'Gym',      Icon: CalendarCheck },
   { to: '/body-weight', label: 'Weight',   Icon: Scale },
   { to: '/analytics',   label: 'Progress', Icon: TrendingUp },
+  { to: '/strength',    label: 'Strength', Icon: Trophy },
 ];
 
 export function BottomNav() {
@@ -18,7 +19,7 @@ export function BottomNav() {
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 px-6 py-1.5 rounded-xl transition-all ${
+              `flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all ${
                 isActive ? 'text-accent' : 'text-gray-400'
               }`
             }
