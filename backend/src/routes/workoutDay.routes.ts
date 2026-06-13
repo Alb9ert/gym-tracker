@@ -15,6 +15,7 @@ router.get('/', controller.getAll);
 router.post('/', validate(createSchema), controller.create);
 router.patch('/reorder', validate(reorderSchema), controller.reorder);
 router.patch('/:id', validate(updateSchema), controller.update);
+router.post('/:id/toggle-active', controller.toggleActive);
 router.delete('/:id', controller.remove);
 
 export default router;

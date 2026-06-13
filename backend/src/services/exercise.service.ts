@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { Exercise } from '../models/Exercise';
 import { ExerciseHistory } from '../models/ExerciseHistory';
 import { WorkoutDay } from '../models/WorkoutDay';
@@ -6,7 +7,16 @@ import { AppError } from '../utils/AppError';
 export async function getByDay(userId: string, dayId: string) {
   const day = await WorkoutDay.findOne({ _id: dayId, userId });
   if (!day) throw AppError.notFound('Workout day');
-  return Exercise.find({ workoutDayId: dayId, userId }).sort({ order: 1 });
+
+  if (day.exercises.length === 0) return [];
+
+  const docs = await Exercise.find({ _id: { $in: day.exercises }, userId }).lean();
+  const map = Object.fromEntries(docs.map((e) => [String(e._id), e]));
+  return day.exercises.map((id) => map[String(id)]).filter(Boolean);
+}
+
+export async function getAll(userId: string) {
+  return Exercise.find({ userId }).sort({ name: 1 }).lean();
 }
 
 export async function create(userId: string, dayId: string, data: {
@@ -20,9 +30,7 @@ export async function create(userId: string, dayId: string, data: {
   const day = await WorkoutDay.findOne({ _id: dayId, userId });
   if (!day) throw AppError.notFound('Workout day');
 
-  const count = await Exercise.countDocuments({ workoutDayId: dayId, userId });
   const exercise = await Exercise.create({
-    workoutDayId: dayId,
     userId,
     name: data.name,
     sets: data.sets,
@@ -30,10 +38,11 @@ export async function create(userId: string, dayId: string, data: {
     weight: data.weight,
     note: data.note ?? null,
     muscleGroups: data.muscleGroups ?? [],
-    order: count,
   });
 
-  // Log the initial state as first history entry
+  day.exercises.push(exercise._id as Types.ObjectId);
+  await day.save();
+
   await ExerciseHistory.create({
     exerciseId: exercise._id,
     userId,
@@ -43,6 +52,23 @@ export async function create(userId: string, dayId: string, data: {
     changedFields: [],
     recordedAt: new Date(),
   });
+
+  return exercise;
+}
+
+export async function linkToDay(userId: string, dayId: string, exerciseId: string) {
+  const [day, exercise] = await Promise.all([
+    WorkoutDay.findOne({ _id: dayId, userId }),
+    Exercise.findOne({ _id: exerciseId, userId }),
+  ]);
+  if (!day) throw AppError.notFound('Workout day');
+  if (!exercise) throw AppError.notFound('Exercise');
+
+  const alreadyLinked = day.exercises.some((id) => String(id) === exerciseId);
+  if (alreadyLinked) throw AppError.conflict('Exercise is already on this day');
+
+  day.exercises.push(new Types.ObjectId(exerciseId));
+  await day.save();
 
   return exercise;
 }
@@ -61,13 +87,11 @@ export async function update(userId: string, exerciseId: string, data: {
   const exercise = await Exercise.findOne({ _id: exerciseId, userId });
   if (!exercise) throw AppError.notFound('Exercise');
 
-  // Determine which tracked fields changed (note is intentionally excluded)
   const changedFields: string[] = [];
   if (data.sets !== undefined && data.sets !== exercise.sets) changedFields.push('sets');
   if (data.reps !== undefined && data.reps !== exercise.reps) changedFields.push('reps');
   if (data.weight !== undefined && data.weight !== exercise.weight) changedFields.push('weight');
 
-  // Apply updates
   if (data.name !== undefined) exercise.name = data.name;
   if (data.sets !== undefined) exercise.sets = data.sets;
   if (data.reps !== undefined) exercise.reps = data.reps;
@@ -80,7 +104,6 @@ export async function update(userId: string, exerciseId: string, data: {
 
   await exercise.save();
 
-  // Only log history when tracked fields actually changed
   if (changedFields.length > 0) {
     await ExerciseHistory.create({
       exerciseId: exercise._id,
@@ -100,16 +123,62 @@ export async function reorder(userId: string, dayId: string, orderedIds: string[
   const day = await WorkoutDay.findOne({ _id: dayId, userId });
   if (!day) throw AppError.notFound('Workout day');
 
-  const ops = orderedIds.map((id, index) =>
-    Exercise.updateOne({ _id: id, userId, workoutDayId: dayId }, { order: index })
-  );
-  await Promise.all(ops);
+  day.exercises = orderedIds.map((id) => new Types.ObjectId(id));
+  await day.save();
 }
 
-export async function remove(userId: string, exerciseId: string) {
-  const exercise = await Exercise.findOne({ _id: exerciseId, userId });
+// Removes exercise from a specific day. If it's not linked anywhere else, deletes the document.
+export async function removeFromDay(userId: string, dayId: string, exerciseId: string) {
+  const [day, exercise] = await Promise.all([
+    WorkoutDay.findOne({ _id: dayId, userId }),
+    Exercise.findOne({ _id: exerciseId, userId }),
+  ]);
+  if (!day) throw AppError.notFound('Workout day');
   if (!exercise) throw AppError.notFound('Exercise');
 
-  await ExerciseHistory.deleteMany({ exerciseId: exercise._id });
-  await exercise.deleteOne();
+  day.exercises = day.exercises.filter((id) => String(id) !== exerciseId);
+  await day.save();
+
+  // Check if still linked to any other day
+  const stillLinked = await WorkoutDay.countDocuments({
+    userId,
+    exercises: new Types.ObjectId(exerciseId),
+  });
+
+  if (stillLinked === 0) {
+    await ExerciseHistory.deleteMany({ exerciseId: exercise._id });
+    await exercise.deleteOne();
+  }
+}
+
+export async function migrateToExercisesArray() {
+  const exercises = await Exercise.find({ workoutDayId: { $exists: true, $ne: null } }).lean();
+  if (exercises.length === 0) return;
+
+  const byDay: Record<string, typeof exercises> = {};
+  for (const ex of exercises) {
+    const dayId = String(ex.workoutDayId);
+    if (!byDay[dayId]) byDay[dayId] = [];
+    byDay[dayId].push(ex);
+  }
+
+  for (const [dayId, exs] of Object.entries(byDay)) {
+    const day = await WorkoutDay.findById(dayId);
+    if (!day) continue;
+
+    const existingIds = new Set(day.exercises.map(String));
+    const sorted = [...exs].sort((a, b) => ((a as any).order ?? 0) - ((b as any).order ?? 0));
+
+    for (const ex of sorted) {
+      const id = String(ex._id);
+      if (!existingIds.has(id)) {
+        day.exercises.push(new Types.ObjectId(id));
+        existingIds.add(id);
+      }
+    }
+
+    await day.save();
+  }
+
+  console.log(`[migrate] Moved ${exercises.length} exercises into WorkoutDay.exercises arrays`);
 }

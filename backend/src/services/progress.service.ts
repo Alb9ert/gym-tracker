@@ -1,6 +1,7 @@
 import { ExerciseHistory } from '../models/ExerciseHistory';
 import { Exercise } from '../models/Exercise';
 import { AppError } from '../utils/AppError';
+import { getActiveExerciseIds } from './stats.service';
 
 export async function getHistory(userId: string, exerciseId: string) {
   const exercise = await Exercise.findOne({ _id: exerciseId, userId });
@@ -37,8 +38,8 @@ export async function getStagnantExercises(userId: string, daysThreshold = 14) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - daysThreshold);
 
-  // Get all exercises for user
-  const exercises = await Exercise.find({ userId });
+  const activeIds = await getActiveExerciseIds(userId);
+  const exercises = await Exercise.find({ userId, _id: { $in: [...activeIds] } });
   if (!exercises.length) return [];
 
   const results = await Promise.all(

@@ -20,6 +20,14 @@ export async function update(userId: string, dayId: string, name: string) {
   return day.save();
 }
 
+export async function toggleActive(userId: string, dayId: string) {
+  const day = await WorkoutDay.findOne({ _id: dayId, userId });
+  if (!day) throw AppError.notFound('Workout day');
+
+  day.isActive = !day.isActive;
+  return day.save();
+}
+
 export async function reorder(userId: string, orderedIds: string[]) {
   const ops = orderedIds.map((id, index) =>
     WorkoutDay.updateOne({ _id: id, userId }, { order: index })
@@ -31,11 +39,17 @@ export async function remove(userId: string, dayId: string) {
   const day = await WorkoutDay.findOne({ _id: dayId, userId });
   if (!day) throw AppError.notFound('Workout day');
 
-  // Cascade: delete exercises and their history
-  const exercises = await Exercise.find({ workoutDayId: dayId, userId });
-  const exerciseIds = exercises.map((e) => e._id);
+  // Only delete exercise docs that are not linked to any other day
+  if (day.exercises.length > 0) {
+    const otherDays = await WorkoutDay.find({ userId, _id: { $ne: dayId } }).select('exercises').lean();
+    const linkedElsewhere = new Set(otherDays.flatMap((d) => (d.exercises ?? []).map(String)));
 
-  await ExerciseHistory.deleteMany({ exerciseId: { $in: exerciseIds } });
-  await Exercise.deleteMany({ workoutDayId: dayId, userId });
+    const toDelete = day.exercises.map(String).filter((id) => !linkedElsewhere.has(id));
+    if (toDelete.length > 0) {
+      await ExerciseHistory.deleteMany({ exerciseId: { $in: toDelete } });
+      await Exercise.deleteMany({ _id: { $in: toDelete } });
+    }
+  }
+
   await day.deleteOne();
 }

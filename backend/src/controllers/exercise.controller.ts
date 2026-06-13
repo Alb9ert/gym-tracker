@@ -13,10 +13,24 @@ export async function getByDay(req: Request, res: Response, next: NextFunction) 
   } catch (err) { next(err); }
 }
 
+export async function getAll(req: Request, res: Response, next: NextFunction) {
+  try {
+    const exercises = await service.getAll(uid(req));
+    res.json({ success: true, data: exercises });
+  } catch (err) { next(err); }
+}
+
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
     const exercise = await service.create(uid(req), req.params.dayId, req.body);
     res.status(201).json({ success: true, data: exercise });
+  } catch (err) { next(err); }
+}
+
+export async function linkToDay(req: Request, res: Response, next: NextFunction) {
+  try {
+    const exercise = await service.linkToDay(uid(req), req.params.dayId, req.params.exerciseId);
+    res.json({ success: true, data: exercise });
   } catch (err) { next(err); }
 }
 
@@ -34,9 +48,9 @@ export async function reorder(req: Request, res: Response, next: NextFunction) {
   } catch (err) { next(err); }
 }
 
-export async function remove(req: Request, res: Response, next: NextFunction) {
+export async function removeFromDay(req: Request, res: Response, next: NextFunction) {
   try {
-    await service.remove(uid(req), req.params.id);
+    await service.removeFromDay(uid(req), req.params.dayId, req.params.exerciseId);
     res.json({ success: true });
   } catch (err) { next(err); }
 }

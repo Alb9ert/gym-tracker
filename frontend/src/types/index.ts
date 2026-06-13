@@ -9,13 +9,13 @@ export interface WorkoutDay {
   userId: string;
   name: string;
   order: number;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface Exercise {
   _id: string;
-  workoutDayId: string;
   userId: string;
   name: string;
   sets: number;
@@ -26,7 +26,6 @@ export interface Exercise {
   goalWeight: boolean;
   goalReps: boolean;
   muscleGroups: string[];
-  order: number;
   createdAt: string;
   updatedAt: string;
 }

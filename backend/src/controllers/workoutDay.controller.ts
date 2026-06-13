@@ -34,6 +34,13 @@ export async function reorder(req: Request, res: Response, next: NextFunction) {
   } catch (err) { next(err); }
 }
 
+export async function toggleActive(req: Request, res: Response, next: NextFunction) {
+  try {
+    const day = await service.toggleActive(uid(req), req.params.id);
+    res.json({ success: true, data: day });
+  } catch (err) { next(err); }
+}
+
 export async function remove(req: Request, res: Response, next: NextFunction) {
   try {
     await service.remove(uid(req), req.params.id);

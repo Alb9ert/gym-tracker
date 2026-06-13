@@ -5,6 +5,19 @@ import { ExerciseHistory } from '../models/ExerciseHistory';
 import { BodyWeightHistory } from '../models/BodyWeightHistory';
 import { AppError } from '../utils/AppError';
 
+// Returns exercise IDs that belong to at least one active workout day.
+// isActive: { $ne: false } treats missing field (pre-feature docs) as active.
+export async function getActiveExerciseIds(userId: string): Promise<Set<string>> {
+  const activeDays = await WorkoutDay.find({ userId, isActive: { $ne: false } })
+    .select('exercises')
+    .lean();
+  const ids = new Set<string>();
+  for (const day of activeDays) {
+    for (const id of (day.exercises ?? [])) ids.add(String(id));
+  }
+  return ids;
+}
+
 function parseReps(reps: string): number {
   if (reps.includes('-')) {
     const [lo, hi] = reps.split('-').map(Number);
@@ -18,15 +31,22 @@ function toDateKey(date: Date): string {
 }
 
 export async function getSummary(userId: string) {
-  const [dayCount, exerciseCount, historyCount, latestWeight] = await Promise.all([
-    WorkoutDay.countDocuments({ userId }),
-    Exercise.countDocuments({ userId }),
+  const activeIds = await getActiveExerciseIds(userId);
+  const activeIdArray = [...activeIds];
+
+  const [dayCount, historyCount, latestWeight] = await Promise.all([
+    WorkoutDay.countDocuments({ userId, isActive: { $ne: false } }),
     ExerciseHistory.countDocuments({ userId }),
     BodyWeightHistory.findOne({ userId }).sort({ recordedAt: -1 }),
   ]);
 
-  // Recent activity: last 8 history entries with exercise name
-  const recent = await ExerciseHistory.find({ userId })
+  const exerciseCount = activeIdArray.length;
+
+  // Recent activity: last 8 history entries for exercises on active days
+  const recent = await ExerciseHistory.find({
+    userId,
+    exerciseId: { $in: activeIdArray },
+  })
     .sort({ recordedAt: -1 })
     .limit(8)
     .lean();
@@ -52,7 +72,8 @@ export async function getStaleExercises(userId: string, days = 14) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
 
-  const exercises = await Exercise.find({ userId, isActive: true }).lean();
+  const activeIds = await getActiveExerciseIds(userId);
+  const exercises = await Exercise.find({ userId, isActive: true, _id: { $in: [...activeIds] } }).lean();
   if (!exercises.length) return [];
 
   const exerciseIds = exercises.map((e) => e._id);
@@ -87,7 +108,10 @@ export async function getDayStats(userId: string, dayId: string) {
   const day = await WorkoutDay.findOne({ _id: dayId, userId });
   if (!day) throw AppError.notFound('Workout day');
 
-  const exercises = await Exercise.find({ workoutDayId: dayId, userId }).sort({ order: 1 });
+  const exerciseIdsForDay = day.exercises.map(String);
+  const exerciseDocs = await Exercise.find({ _id: { $in: exerciseIdsForDay }, userId, isActive: true }).lean();
+  const exerciseDocMap = Object.fromEntries(exerciseDocs.map((e) => [String(e._id), e]));
+  const exercises = exerciseIdsForDay.map((id) => exerciseDocMap[id]).filter(Boolean);
 
   // Fetch all history for every exercise in this day in one query
   const exerciseIds = exercises.map((e) => e._id);
@@ -105,9 +129,13 @@ export async function getDayStats(userId: string, dayId: string) {
   });
 
   // --- Volume timeline ---
-  // Collect all unique calendar dates with activity
+  // Chart dates come only from actual progression events (changedFields non-empty).
+  // Creation entries (changedFields: []) are the baseline weight only — they never
+  // create a new chart date.
   const allDates = new Set<string>();
-  allHistory.forEach((h) => allDates.add(toDateKey(h.recordedAt)));
+  allHistory
+    .filter((h) => h.changedFields && h.changedFields.length > 0)
+    .forEach((h) => allDates.add(toDateKey(h.recordedAt)));
   const sortedDates = Array.from(allDates).sort();
 
   const volumeByDate = sortedDates.map((dateKey) => {
@@ -118,15 +146,22 @@ export async function getDayStats(userId: string, dayId: string) {
 
     exercises.forEach((ex) => {
       const history = historyByExercise.get(String(ex._id)) ?? [];
+      if (history.length === 0) return;
+
+      // Use the most recent entry on or before this date.
+      // If the exercise hadn't been logged yet at this date, fall back to the
+      // creation entry (history[0]) — the user's stated convention is that the
+      // creation weight is what they were already lifting on day 1, so we include
+      // it retroactively at that baseline rather than spiking the chart the first
+      // time the exercise appears.
       const relevant = history.filter((h) => h.recordedAt <= cutoff);
-      if (relevant.length === 0) return;
-      const latest = relevant[relevant.length - 1];
-      if (latest.weight != null) {
-        const reps = parseReps(latest.reps);
-        totalVolume = (totalVolume ?? 0) + latest.sets * reps * latest.weight;
-        totalWeightSum += latest.weight;
-        weightCount++;
-      }
+      const latest = relevant.length > 0 ? relevant[relevant.length - 1] : history[0];
+      if (latest.weight == null) return;
+
+      const reps = parseReps(latest.reps);
+      totalVolume = (totalVolume ?? 0) + latest.sets * reps * latest.weight;
+      totalWeightSum += latest.weight;
+      weightCount++;
     });
 
     return {
@@ -168,8 +203,9 @@ export async function getDayStats(userId: string, dayId: string) {
 }
 
 export async function getStrengthRankings(userId: string) {
+  const activeIds = await getActiveExerciseIds(userId);
   const [exercises, latestBW] = await Promise.all([
-    Exercise.find({ userId, isActive: true })
+    Exercise.find({ userId, isActive: true, _id: { $in: [...activeIds] } })
       .select('name muscleGroups sets reps weight')
       .lean(),
     BodyWeightHistory.findOne({ userId }).sort({ recordedAt: -1 }).lean(),
@@ -300,7 +336,8 @@ export async function getMuscleStats(userId: string) {
     await ex.save();
   }
 
-  const exercises = await Exercise.find({ userId, isActive: true })
+  const activeIds = await getActiveExerciseIds(userId);
+  const exercises = await Exercise.find({ userId, isActive: true, _id: { $in: [...activeIds] } })
     .select('name muscleGroups sets reps weight')
     .lean();
 

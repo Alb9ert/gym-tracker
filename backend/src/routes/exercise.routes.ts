@@ -34,9 +34,11 @@ const reorderSchema = z.object({ orderedIds: z.array(z.string()).min(1) });
 router.get('/', controller.getByDay);
 router.post('/', validate(createSchema), controller.create);
 router.patch('/reorder', validate(reorderSchema), controller.reorder);
+router.post('/:exerciseId/link', controller.linkToDay);
+router.delete('/:exerciseId', controller.removeFromDay);
 
 // Mounted at /api/exercises
+router.get('/all', controller.getAll);
 router.patch('/:id', validate(updateSchema), controller.update);
-router.delete('/:id', controller.remove);
 
 export default router;

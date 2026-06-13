@@ -17,7 +17,10 @@ import { Button } from '@/components/ui/Button';
 import { Sheet } from '@/components/ui/Sheet';
 import { ExerciseRow } from '@/components/exercise/ExerciseRow';
 import { ExerciseForm } from '@/components/exercise/ExerciseForm';
+import { ExercisePicker } from '@/components/exercise/ExercisePicker';
 import type { Exercise } from '@/types';
+
+type AddTab = 'new' | 'existing';
 
 export function WorkoutDay() {
   const { dayId } = useParams<{ dayId: string }>();
@@ -25,10 +28,10 @@ export function WorkoutDay() {
   const queryClient = useQueryClient();
 
   const [addOpen, setAddOpen] = useState(false);
+  const [addTab, setAddTab] = useState<AddTab>('new');
   const [editExercise, setEditExercise] = useState<Exercise | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Local order state for optimistic drag reorder
   const [ordered, setOrdered] = useState<Exercise[]>([]);
 
   const { data: days } = useQuery({
@@ -43,12 +46,16 @@ export function WorkoutDay() {
     enabled: !!dayId,
   });
 
-  // Keep local order in sync with server data
+  const { data: allExercises } = useQuery({
+    queryKey: ['exercises-all'],
+    queryFn: () => exercisesApi.getAll().then((r) => r.data.data),
+    enabled: addOpen && addTab === 'existing',
+  });
+
   useEffect(() => {
     if (exercises) setOrdered(exercises);
   }, [exercises]);
 
-  // Sensors: pointer (desktop) + touch with a short delay (mobile scroll safety)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
@@ -63,7 +70,6 @@ export function WorkoutDay() {
       const newIndex = items.findIndex((e) => e._id === over.id);
       const reordered = arrayMove(items, oldIndex, newIndex);
 
-      // Persist to server (fire-and-forget; on error, invalidate to revert)
       exercisesApi
         .reorder(dayId!, reordered.map((e) => e._id))
         .catch(() => queryClient.invalidateQueries({ queryKey: ['exercises', dayId] }));
@@ -77,8 +83,18 @@ export function WorkoutDay() {
       exercisesApi.create(dayId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['exercises', dayId] });
+      queryClient.invalidateQueries({ queryKey: ['exercises-all'] });
       setAddOpen(false);
       setFormError(null);
+    },
+    onError: (err) => setFormError(getErrorMessage(err)),
+  });
+
+  const linkMutation = useMutation({
+    mutationFn: (exerciseId: string) => exercisesApi.linkToDay(dayId!, exerciseId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['exercises', dayId] });
+      setAddOpen(false);
     },
     onError: (err) => setFormError(getErrorMessage(err)),
   });
@@ -88,6 +104,7 @@ export function WorkoutDay() {
       exercisesApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['exercises', dayId] });
+      queryClient.invalidateQueries({ queryKey: ['exercises-all'] });
       setEditExercise(null);
       setFormError(null);
     },
@@ -95,9 +112,14 @@ export function WorkoutDay() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => exercisesApi.remove(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['exercises', dayId] }),
+    mutationFn: (id: string) => exercisesApi.removeFromDay(dayId!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['exercises', dayId] });
+      queryClient.invalidateQueries({ queryKey: ['exercises-all'] });
+    },
   });
+
+  const linkedIds = new Set((ordered ?? []).map((e) => e._id));
 
   return (
     <div className="px-5 pt-14 pb-6">
@@ -139,7 +161,7 @@ export function WorkoutDay() {
                   dayId={dayId!}
                   onEdit={() => { setEditExercise(exercise); setFormError(null); }}
                   onDelete={() => {
-                    if (confirm(`Delete "${exercise.name}"? History will also be removed.`)) {
+                    if (confirm(`Remove "${exercise.name}" from this day?`)) {
                       deleteMutation.mutate(exercise._id);
                     }
                   }}
@@ -151,18 +173,46 @@ export function WorkoutDay() {
         </DndContext>
       )}
 
-      <Button onClick={() => { setAddOpen(true); setFormError(null); }} className="w-full mt-5 gap-2">
+      <Button onClick={() => { setAddOpen(true); setAddTab('new'); setFormError(null); }} className="w-full mt-5 gap-2">
         <Plus size={16} strokeWidth={2.5} />
         Add exercise
       </Button>
 
-      <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="New exercise">
-        <ExerciseForm
-          error={formError}
-          loading={createMutation.isPending}
-          onSubmit={(data) => createMutation.mutate(data)}
-          submitLabel="Add exercise"
-        />
+      {/* Add exercise sheet */}
+      <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Add exercise">
+        {/* Tab switcher */}
+        <div className="flex rounded-xl bg-gray-100 p-1 mb-5">
+          {(['new', 'existing'] as AddTab[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => { setAddTab(tab); setFormError(null); }}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
+                addTab === tab
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-secondary'
+              }`}
+            >
+              {tab === 'new' ? 'Create new' : 'Pick existing'}
+            </button>
+          ))}
+        </div>
+
+        {addTab === 'new' ? (
+          <ExerciseForm
+            error={formError}
+            loading={createMutation.isPending}
+            onSubmit={(data) => createMutation.mutate(data)}
+            submitLabel="Add exercise"
+          />
+        ) : (
+          <ExercisePicker
+            exercises={allExercises ?? []}
+            alreadyLinkedIds={linkedIds}
+            onPick={(ex) => linkMutation.mutate(ex._id)}
+            loading={linkMutation.isPending}
+          />
+        )}
       </Sheet>
 
       <Sheet open={!!editExercise} onClose={() => setEditExercise(null)} title="Edit exercise">

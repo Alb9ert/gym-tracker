@@ -1,7 +1,7 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
 export interface IExercise extends Document {
-  workoutDayId: Types.ObjectId;
+  workoutDayId?: Types.ObjectId;
   userId: Types.ObjectId;
   name: string;
   sets: number;
@@ -19,7 +19,7 @@ export interface IExercise extends Document {
 
 const exerciseSchema = new Schema<IExercise>(
   {
-    workoutDayId: { type: Schema.Types.ObjectId, ref: 'WorkoutDay', required: true, index: true },
+    workoutDayId: { type: Schema.Types.ObjectId, ref: 'WorkoutDay', required: false, index: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     name: { type: String, required: true, trim: true },
     sets: { type: Number, required: true, default: 3, min: 1 },

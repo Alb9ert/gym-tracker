@@ -49,6 +49,11 @@ export function Dashboard() {
     onError: (err) => setFormError(getErrorMessage(err)),
   });
 
+  const toggleActiveMutation = useMutation({
+    mutationFn: (id: string) => workoutDaysApi.toggleActive(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workout-days'] }),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => workoutDaysApi.remove(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workout-days'] }),
@@ -97,40 +102,64 @@ export function Dashboard() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {data?.map((day) => (
-            <div
-              key={day._id}
-              className="bg-white rounded-2xl border border-border-subtle shadow-sm overflow-hidden"
-            >
-              <button
-                className="w-full text-left px-5 py-4 active:bg-gray-50 transition-colors"
-                onClick={() => navigate(`/workout/${day._id}`)}
+          {data?.map((day) => {
+            const inactive = day.isActive === false;
+            return (
+              <div
+                key={day._id}
+                className={`rounded-2xl border shadow-sm overflow-hidden transition-opacity ${
+                  inactive ? 'opacity-60 bg-gray-50 border-border-subtle' : 'bg-white border-border-subtle'
+                }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-semibold text-primary">{day.name}</span>
-                  <ChevronRight size={18} className="text-gray-300 flex-shrink-0" />
+                <button
+                  className="w-full text-left px-5 py-4 active:bg-gray-50 transition-colors"
+                  onClick={() => navigate(`/workout/${day._id}`)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-lg font-semibold ${inactive ? 'text-secondary' : 'text-primary'}`}>
+                      {day.name}
+                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {inactive && (
+                        <span className="text-xs font-semibold text-secondary bg-gray-200 px-2 py-0.5 rounded-md">
+                          Inactive
+                        </span>
+                      )}
+                      <ChevronRight size={18} className="text-gray-300" />
+                    </div>
+                  </div>
+                </button>
+                <div className="flex gap-2 px-5 pb-3 border-t border-border-subtle pt-2.5 bg-gray-50">
+                  <button
+                    onClick={() => openEdit(day)}
+                    className="text-accent text-sm font-semibold px-3 py-1 bg-accent/10 rounded-lg active:bg-accent/20"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    onClick={() => toggleActiveMutation.mutate(day._id)}
+                    className={`text-sm font-semibold px-3 py-1 rounded-lg transition-all ${
+                      inactive
+                        ? 'text-accent-green bg-accent-green/10 active:bg-accent-green/20'
+                        : 'text-secondary bg-gray-200 active:bg-gray-300'
+                    }`}
+                  >
+                    {inactive ? 'Activate' : 'Deactivate'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete "${day.name}"? This removes all exercises and history.`)) {
+                        deleteMutation.mutate(day._id);
+                      }
+                    }}
+                    className="text-accent-red text-sm font-semibold px-3 py-1 bg-accent-red/10 rounded-lg active:bg-accent-red/20"
+                  >
+                    Delete
+                  </button>
                 </div>
-              </button>
-              <div className="flex gap-2 px-5 pb-3 border-t border-border-subtle pt-2.5 bg-gray-50">
-                <button
-                  onClick={() => openEdit(day)}
-                  className="text-accent text-sm font-semibold px-3 py-1 bg-accent/10 rounded-lg active:bg-accent/20"
-                >
-                  Rename
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm(`Delete "${day.name}"? This removes all exercises and history.`)) {
-                      deleteMutation.mutate(day._id);
-                    }
-                  }}
-                  className="text-accent-red text-sm font-semibold px-3 py-1 bg-accent-red/10 rounded-lg active:bg-accent-red/20"
-                >
-                  Delete
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {data?.length === 0 && (
             <div className="text-center py-16 bg-white rounded-2xl border border-border-subtle">

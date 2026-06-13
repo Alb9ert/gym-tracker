@@ -14,6 +14,9 @@ export const workoutDaysApi = {
   reorder: (orderedIds: string[]) =>
     apiClient.patch('/api/workout-days/reorder', { orderedIds }),
 
+  toggleActive: (id: string) =>
+    apiClient.post<{ success: true; data: WorkoutDay }>(`/api/workout-days/${id}/toggle-active`, {}),
+
   remove: (id: string) =>
     apiClient.delete(`/api/workout-days/${id}`),
 };
